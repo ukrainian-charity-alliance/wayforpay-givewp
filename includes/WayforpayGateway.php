@@ -137,9 +137,17 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         );
         $serviceUrl = $this->webhook->getNotificationUrl($serviceUrlParams);
         $amount = $donation->amount->formatToDecimal();
-        $campaign = $donation->campaign?->title ?? null;
-        if (empty($campaign)) {
-            throw new PaymentGatewayException(__('Missing Donation Campaign from GiveWP.', 'wayforpay-givewp'));
+        $campaign = $donation->campaign()->get();
+        $campaignTitle = $campaign?->title ?? null;
+        if (empty($campaignTitle)) {
+            DonationNote::create([
+                'donationId' => $donation->id,
+                'content' => sprintf(
+                    __('Missing campaign title. Donation: %s, Campaign: %s', 'wayforpay-givewp'),
+                    print_r($donation, true), print_r($campaign, true)
+                )
+            ]);
+            throw new PaymentGatewayException(__('Missing Donation Campaign Title from GiveWP.', 'wayforpay-givewp'));
         }
 
         $wayforpayArgs = [
@@ -155,7 +163,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'returnUrl' => $returnUrl,
             'serviceUrl' => $serviceUrl,
             'language' => substr(get_bloginfo('language'), 0, 2),
-            'productName' => [$campaign],
+            'productName' => [$campaignTitle],
             'productPrice' => [$amount],
             'productCount' => [1],
         ];
@@ -247,32 +255,49 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     /**
      * Handle redirection from Wayforpay back to the site after payment.
-     * This is purely UX; donation updating logic is handled via webhooks in handleServiceCallback.
+     * This is purely UX; any donation updating logic should be handled via webhooks to serviceUrl.
      */
     protected function handleReturnUrl(array $queryParams): RedirectResponse
     {
-        $donationId = $queryParams['donation-id'] ?? null;
-
-        // WayForPay may POST data here, but we don't rely on it for status updates.
-        // The serviceUrl webhook is the authoritative source for payment status.
+        // WayForPay may POST transaction data here, but we don't rely on it for status updates.
+        // The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
         $data = stripslashes_deep($_POST);
-        
-        if (!empty($data)) {
-            // Optionally verify signature if data is present
-            $secretKey = WayforpaySettings::getSecretKey();
-            if ($this->serviceUrlSignature($data, $secretKey) === ($data['merchantSignature'] ?? '')) {
-                $transactionStatus = $data['transactionStatus'] ?? $data['status'] ?? '';
-                
-                // If payment failed, redirect to failure page
-                if ($transactionStatus === 'Declined' || $transactionStatus === 'Expired') {
-                    return new RedirectResponse(give_get_failed_transaction_uri());
-                }
+
+        $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
+        if (!empty($donationId)) {
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    __('Redirecting user back to site. Query params: %s, POST data: %s', 'wayforpay-givewp'),
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+        }
+
+        if (empty($data)) {
+            throw new PaymentGatewayException(__('No data received from Wayforpay.', 'wayforpay-givewp'));
+        }
+
+        // If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
+        // If not, it's okay to continue; there are no updates done via returnUrl.
+        $gotSignature = $data['merchantSignature'] ?? null;
+        if (!empty($gotSignature)) {
+            $expectedSignature = $this->serviceUrlSignature($data, WayforpaySettings::getSecretKey());
+            if ($gotSignature !== $expectedSignature) {
+                throw new PaymentGatewayException(__('Invalid signature received from Wayforpay.', 'wayforpay-givewp'));
             }
         }
 
-        // Redirect user to success page
-        // Note: The donation status may not be updated yet if the serviceUrl webhook hasn't fired.
-        return new RedirectResponse(give_get_success_page_uri());
+        $reasonCode = isset($data['reasonCode']) ? (int) $data['reasonCode'] : null;
+        switch ($reasonCode) {
+            case 1100: // OK
+                return new RedirectResponse(give_get_success_page_uri());
+            case 5103: // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
+                return new RedirectResponse(give_send_back_to_checkout());
+            default:
+                return new RedirectResponse(give_get_failed_transaction_uri());
+        }
     }
 
     /**
@@ -326,7 +351,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             $sendAckResponse('accept', 200);
         }
 
-        $donationId = $requestData['donation-id'] ?? null;
+        $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
         if (!$donationId) {
             $sendAckResponse('decline', 404);
         }
@@ -474,6 +499,15 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $reasonCode = $data['reasonCode'] ?? null;
         $transactionStatus = $data['transactionStatus'] ?? null;
         if ($reasonCode === 1100 || $transactionStatus === 'Refunded') { // reasonCode 1100 = OK
+            DonationNote::create([
+                'donationId' => $donation->id,
+                'content' => sprintf(
+                    __('Refund successful via Wayforpay. Status: %s, Reason Code: %s, Reason: %s', 'wayforpay-givewp'),
+                    $transactionStatus,
+                    $reasonCode,
+                    $reason
+                )
+            ]);
             return new PaymentRefunded();
         }
 
