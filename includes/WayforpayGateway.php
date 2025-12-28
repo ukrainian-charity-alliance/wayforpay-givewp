@@ -214,7 +214,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                         $wayforpayResponse->get_error_message()
                     )
                 ]);
-                throw new PaymentGatewayException('WP_Error: ' . $wayforpayResponse->get_error_message());
+                throw new PaymentGatewayException(sprintf('WP_Error: %s', $wayforpayResponse->get_error_message()));
             }
 
             $httpCode = wp_remote_retrieve_response_code($wayforpayResponse);
@@ -228,7 +228,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                         $responseBody
                     )
                 ]);
-                throw new PaymentGatewayException('Wayforpay did not provide a redirect, instead ' . $httpCode . '. Response: ' . $responseBody);
+                throw new PaymentGatewayException(sprintf('Wayforpay did not provide a redirect, instead %d. Response: %s', $httpCode, $responseBody));
             }
 
             $wayforPayRedirect = $responseHeaders['Location'];
@@ -240,6 +240,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 throw new PaymentGatewayException('Wayforpay header has no location');
             }
 
+            DonationNote::create([
+                'donationId' => $donation->id,
+                'content' => sprintf(__('Sending user to payment URL: %s', 'wayforpay-givewp'), $wayforPayRedirect)
+            ]);
             return new RedirectOffsite($wayforPayRedirect);
         } catch (Exception $e) {
             DonationNote::create([
@@ -249,7 +253,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                     $e->getMessage()
                 )
             ]);
-            throw new PaymentGatewayException('Unknown error occurred: ' . $e->getMessage());
+            throw new PaymentGatewayException(sprintf('Unknown error occurred: %s', $e->getMessage()));
         }
     }
 
@@ -297,7 +301,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 return new RedirectResponse(give_get_success_page_uri());
             case 5103: // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
                 // Redirect to the Donor Dashboard page so users can at least see the status.
-                // TODO: consider adding a URL param to show the in progress state.
+                // TODO: consider adding a URL param to show the in progress state or a link back to the Wayforpay page.
+                // TODO: perhaps with a Hidden Field in the Donation, we can store the Wayforpay redirect URL and use it here.
                 return new RedirectResponse(give_get_history_page_uri());
             default:
                 return new RedirectResponse(give_get_failed_transaction_uri());
@@ -485,7 +490,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 )
             ]);
             throw new PaymentGatewayException(
-                'Wayforpay refund request failed: ' . $response->get_error_message()
+                sprintf('Wayforpay refund request failed: %s', $response->get_error_message())
             );
         }
 
@@ -693,7 +698,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         ]);
         if (is_wp_error($response)) {
             throw new PaymentGatewayException(
-                'Failed to cancel subscription at Wayforpay: ' . $response->get_error_message()
+                sprintf('Failed to cancel subscription at Wayforpay: %s', $response->get_error_message())
             );
         }
 
