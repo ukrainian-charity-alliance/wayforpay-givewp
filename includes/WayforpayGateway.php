@@ -264,16 +264,18 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $data = stripslashes_deep($_POST);
 
         $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
-        if (!empty($donationId)) {
-            DonationNote::create([
-                'donationId' => $donationId,
-                'content' => sprintf(
-                    __('Redirecting user back to site. Query params: %s, POST data: %s', 'wayforpay-givewp'),
-                    print_r($queryParams, true),
-                    print_r($data, true)
-                )
-            ]);
+        if (empty($donationId)) {
+            throw new PaymentGatewayException(__('No donation-id parameter received from Wayforpay.', 'wayforpay-givewp'));
         }
+
+        DonationNote::create([
+            'donationId' => $donationId,
+            'content' => sprintf(
+                __('Redirecting user back to site. Query params: %s, POST data: %s', 'wayforpay-givewp'),
+                print_r($queryParams, true),
+                print_r($data, true)
+            )
+        ]);
 
         if (empty($data)) {
             throw new PaymentGatewayException(__('No data received from Wayforpay.', 'wayforpay-givewp'));
@@ -294,7 +296,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             case 1100: // OK
                 return new RedirectResponse(give_get_success_page_uri());
             case 5103: // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
-                return new RedirectResponse(give_send_back_to_checkout());
+                // Redirect to the Donor Dashboard page so users can at least see the status.
+                // TODO: consider adding a URL param to show the in progress state.
+                return new RedirectResponse(give_get_history_page_uri());
             default:
                 return new RedirectResponse(give_get_failed_transaction_uri());
         }
