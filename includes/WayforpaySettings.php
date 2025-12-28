@@ -84,6 +84,13 @@ class WayforpaySettings
                 'default' => '',
             ],
             [
+                'name'    => __('Merchant Password', 'wayforpay-givewp'),
+                'desc'    => __('Your Wayforpay merchant password. Only required for subscription cancellation functionality.', 'wayforpay-givewp'),
+                'id'      => 'wayforpay_merchant_password',
+                'type'    => 'api_key',
+                'default' => '',
+            ],
+            [
                 'id'   => 'give_title_wayforpay',
                 'type' => 'sectionend',
             ],
@@ -115,6 +122,13 @@ class WayforpaySettings
                 'default' => '',
             ],
             [
+                'name'    => __('Test Merchant Password', 'wayforpay-givewp'),
+                'desc'    => __('Wayforpay test merchant password. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852521', 'wayforpay-givewp'),
+                'id'      => 'wayforpay_test_merchant_password',
+                'type'    => 'text',
+                'default' => '',
+            ],
+            [
                 'id'   => 'give_title_wayforpay_test',
                 'type' => 'sectionend',
             ],
@@ -135,6 +149,14 @@ class WayforpaySettings
             return give_get_option('wayforpay_test_secret_key', '');
         }
         return give_get_option('wayforpay_secret_key', '');
+    }
+
+    public static function getMerchantPassword(): string
+    {
+        if (self::isTestMode()) {
+            return give_get_option('wayforpay_test_merchant_password', '');
+        }
+        return give_get_option('wayforpay_merchant_password', '');
     }
 
     public static function isTestMode(): bool
