@@ -35,7 +35,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     /**
      * @inheritDoc
      * 
-     * Note: secureRouteMethods is not used yet, because Wayforpay allows only 256 characters in returnUrl
+     * Note: secureRouteMethods cannot yet be used. Wayforpay allows max 256 chars for returnUrl/serviceUrl.
+     * The addition of additional signature params in the URLs surpasses these 256 chars.
+     * It is likely that a feature request to Wayforpay will be needed.
      */
     public $secureRouteMethods = [];
 
@@ -100,9 +102,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     public function getLegacyFormFieldMarkup(int $formId, array $args): string
     {
-        // For an offsite gateway, this is just help text that displays on the form. 
+        // For legacy forms, show a simple help text as a fallback.
         return "<div class='wayforpay-gateway-help-text'>
-                    <p>" . esc_html__('You will be sent to the secure Wayforpay platform to complete your donation.', 'wayforpay-givewp') . "</p>
+                    <p>" . esc_html__(this->formSettings($formId)['message'], 'wayforpay-givewp') . "</p>
                 </div>";
     }
 
@@ -126,9 +128,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $merchantAccount = WayforpaySettings::getMerchantAccount();
         $secretKey = WayforpaySettings::getSecretKey();
         if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException(
-                __('Wayforpay gateway is not configured. Please set your Merchant Account and Secret Key in Donations → Settings → Payment Gateways → Wayforpay.', 'wayforpay-givewp')
-            );
+            throw new PaymentGatewayException('Wayforpay is not configured');
         }
 
         $returnUrl = $this->generateGatewayRouteUrl(
@@ -137,17 +137,18 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         );
         $serviceUrl = $this->webhook->getNotificationUrl($serviceUrlParams);
         $amount = $donation->amount->formatToDecimal();
+        $currency = strtoupper($donation->amount->getCurrency()->getCode());
+        // A Donation may have multiple payment attempts; orderReference should differ from donationId.
+        $orderReference = $donation->id . '-' . time();
+
         $campaign = $donation->campaign()->get();
         $campaignTitle = $campaign?->title ?? null;
         if (empty($campaignTitle)) {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf(
-                    __('Missing campaign title. Donation: %s, Campaign: %s', 'wayforpay-givewp'),
-                    print_r($donation, true), print_r($campaign, true)
-                )
+                'content' => sprintf('Missing title from Campaign: %s', print_r($campaign, true))
             ]);
-            throw new PaymentGatewayException(__('Missing Donation Campaign Title from GiveWP.', 'wayforpay-givewp'));
+            throw new PaymentGatewayException('missing campaign');
         }
 
         $wayforpayArgs = [
@@ -156,9 +157,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'merchantDomainName' => wp_parse_url(home_url(), PHP_URL_HOST),
             'merchantTransactionSecureType' => 'AUTO',
 
-            'orderReference' => $donation->id . '-' . time(),
-            'orderDate' => $donation->createdAt->getTimestamp(),
-            'currency' => strtoupper($donation->amount->getCurrency()->getCode()),
+            'orderReference' => $orderReference,
+            'orderDate' => $donation->createdAt->getTimestamp(), // TODO: consider making this time() to support recurring better.
+            'currency' => $currency,
             'amount' => $amount,
             'returnUrl' => $returnUrl,
             'serviceUrl' => $serviceUrl,
@@ -167,8 +168,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'productPrice' => [$amount],
             'productCount' => [1],
         ];
-        $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
-        // If available, send additional client metadata from the GiveWP form to the Payment Gateway.
+        // Wayforpay supports sending optional client metadata. This can help with analytics on the Wayforpay side.
         if (!empty($donation->firstName)) {
             $wayforpayArgs['clientFirstName'] = $donation->firstName;
         }
@@ -178,12 +178,14 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (!empty($donation->email)) {
             $wayforpayArgs['clientEmail'] = $donation->email;
         }
+        // Additional functionality (i.e. recurring payments) should be passed in as args by the caller.
+        $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
         $wayforpayArgs['merchantSignature'] = $this->paymentSignature($wayforpayArgs, $secretKey);
 
         DonationNote::create([
             'donationId' => $donation->id,
             'content' => sprintf(
-                __('Redirecting donor to Wayforpay. Order: %s, Amount: %s %s', 'wayforpay-givewp'),
+                'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s',
                 $wayforpayArgs['orderReference'],
                 $wayforpayArgs['amount'],
                 $wayforpayArgs['currency']
@@ -210,11 +212,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        __('Payment failed: Could not connect to Wayforpay. Error: %s', 'wayforpay-givewp'),
+                        'Payment failed: Could not connect to Wayforpay. Error: %s',
                         $wayforpayResponse->get_error_message()
                     )
                 ]);
-                throw new PaymentGatewayException(sprintf('WP_Error: %s', $wayforpayResponse->get_error_message()));
+                throw new PaymentGatewayException('could not connect to Wayforpay');
             }
 
             $httpCode = wp_remote_retrieve_response_code($wayforpayResponse);
@@ -223,37 +225,32 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        __('Payment failed: Expected Wayforpay to redirect but got HTTP %d. Response: %s', 'wayforpay-givewp'),
-                        $httpCode,
-                        $responseBody
-                    )
+                        'Payment failed: Expected Wayforpay to redirect but got HTTP %d. Response: %s',
+                        $httpCode, $responseBody)
                 ]);
-                throw new PaymentGatewayException(sprintf('Wayforpay did not provide a redirect, instead %d. Response: %s', $httpCode, $responseBody));
+                throw new PaymentGatewayException('no redirect HTTP code provided');
             }
 
             $wayforPayRedirect = $responseHeaders['Location'];
             if (empty($wayforPayRedirect)) {
                 DonationNote::create([
                     'donationId' => $donation->id,
-                    'content' => __('Payment failed: Wayforpay did not provide a payment page URL.', 'wayforpay-givewp')
+                    'content' => sprintf('Payment failed: Wayforpay did not provide a Location in headers: %s', $responseHeaders)
                 ]);
-                throw new PaymentGatewayException('Wayforpay header has no location');
+                throw new PaymentGatewayException('no redirect URL provided');
             }
 
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf(__('Sending user to payment URL: %s', 'wayforpay-givewp'), $wayforPayRedirect)
+                'content' => sprintf('Sending user to payment URL: %s', $wayforPayRedirect)
             ]);
             return new RedirectOffsite($wayforPayRedirect);
         } catch (Exception $e) {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf(
-                    __('Payment failed due to an unexpected error: %s.', 'wayforpay-givewp'),
-                    $e->getMessage()
-                )
+                'content' => sprintf('Payment failed: unknown error %s.', $e->getMessage())
             ]);
-            throw new PaymentGatewayException(sprintf('Unknown error occurred: %s', $e->getMessage()));
+            throw new PaymentGatewayException('unknown error');
         }
     }
 
@@ -269,42 +266,57 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
         if (empty($donationId)) {
-            throw new PaymentGatewayException(__('No donation-id parameter received from Wayforpay.', 'wayforpay-givewp'));
+            throw new PaymentGatewayException('no donation-id parameter received from Wayforpay');
         }
 
-        DonationNote::create([
-            'donationId' => $donationId,
-            'content' => sprintf(
-                __('Redirecting user back to site. Query params: %s, POST data: %s', 'wayforpay-givewp'),
-                print_r($queryParams, true),
-                print_r($data, true)
-            )
-        ]);
-
         if (empty($data)) {
-            throw new PaymentGatewayException(__('No data received from Wayforpay.', 'wayforpay-givewp'));
+            throw new PaymentGatewayException('no data received from Wayforpay');
         }
 
         // If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
-        // If not, it's okay to continue; there are no updates done via returnUrl.
+        // If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
         $gotSignature = $data['merchantSignature'] ?? null;
         if (!empty($gotSignature)) {
             $expectedSignature = $this->serviceUrlSignature($data, WayforpaySettings::getSecretKey());
             if ($gotSignature !== $expectedSignature) {
-                throw new PaymentGatewayException(__('Invalid signature received from Wayforpay.', 'wayforpay-givewp'));
+                throw new PaymentGatewayException('invalid signature received from Wayforpay.');
             }
         }
 
         $reasonCode = isset($data['reasonCode']) ? (int) $data['reasonCode'] : null;
         switch ($reasonCode) {
             case 1100: // OK
+                DonationNote::create([
+                    'donationId' => $donationId,
+                    'content' => sprintf(
+                        'Payment successful: redirecting user to success page. Query params: %s, POST data: %s',
+                        print_r($queryParams, true),
+                        print_r($data, true)
+                    )
+                ]);
                 return new RedirectResponse(give_get_success_page_uri());
             case 5103: // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
                 // Redirect to the Donor Dashboard page so users can at least see the status.
                 // TODO: consider adding a URL param to show the in progress state or a link back to the Wayforpay page.
                 // TODO: perhaps with a Hidden Field in the Donation, we can store the Wayforpay redirect URL and use it here.
+                DonationNote::create([
+                    'donationId' => $donationId,
+                    'content' => sprintf(
+                        'Payment still pending: redirecting user to history page. Query params: %s, POST data: %s',
+                        print_r($queryParams, true),
+                        print_r($data, true)
+                    )
+                ]);
                 return new RedirectResponse(give_get_history_page_uri());
             default:
+                DonationNote::create([
+                    'donationId' => $donationId,
+                    'content' => sprintf(
+                        'Payment failed: redirecting user to failure page. Query params: %s, POST data: %s',
+                        print_r($queryParams, true),
+                        print_r($data, true)
+                    )
+                ]);
                 return new RedirectResponse(give_get_failed_transaction_uri());
         }
     }
@@ -342,7 +354,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             $sendAckResponse('decline', 400);
         }
 
-        $gotSignature = $data['merchantSignature'] ?? '';
+        $gotSignature = $data['merchantSignature'] ?? null;
         $expectedSignature = $this->serviceUrlSignature($data, $secretKey);
         if ($gotSignature !== $expectedSignature) {
             $sendAckResponse('decline', 403);
@@ -351,9 +363,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         // Handle subscription renewal webhooks.
         // If subscription-id is present, it's a renewal webhook.
         $subscriptionId = $requestData['subscription-id'] ?? null;
-        if ($subscriptionId) {
+        if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
-            if (!$subscription) {
+            if (empty($subscription)) {
                 $sendAckResponse('decline', 404);
             }
             $this->handleRenewal($data, $subscription);
@@ -361,11 +373,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         }
 
         $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
-        if (!$donationId) {
+        if (empty($donationId)) {
             $sendAckResponse('decline', 404);
         }
         $donation = Donation::find($donationId);
-        if (!$donation) {
+        if (empty($donation)) {
             $sendAckResponse('decline', 404);
         }
 
@@ -376,9 +388,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 $donation->gatewayTransactionId = $data['orderReference'];
                 $donation->save();
 
-                if ($subscriptionId) {
+                if (!empty($subscriptionId)) {
                     $subscription = Subscription::find($subscriptionId);
-                    if ($subscription && empty($subscription->gatewaySubscriptionId)) {
+                    if (!empty($subscription) && empty($subscription->gatewaySubscriptionId)) {
                         $subscription->gatewaySubscriptionId = $data['orderReference'];
                         $subscription->save();
                     }
@@ -387,7 +399,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        __('Payment successful! Card: %s, Authorization Code: %s', 'wayforpay-givewp'),
+                        'Payment successful. Card: %s, Authorization Code: %s',,
                         $data['cardPan'] ?? null, $data['authCode'] ?? null
                     )
                 ]);
@@ -401,7 +413,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        __('Payment declined. Status: %s. Reason code: %s. The donor\'s card may have been declined or expired.', 'wayforpay-givewp'),
+                        'Payment declined. Status: %s. Reason code: %s',
                         $transactionStatus, $data['reasonCode'] ?? null
                     )
                 ]);
@@ -409,10 +421,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         } else {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf(
-                    __('Wayforpay sent a status update: %s. Awaiting final confirmation.', 'wayforpay-givewp'),
-                    $transactionStatus
-                )
+                'content' => sprintf('Wayforpay sent a status update: %s. Awaiting final confirmation.', $transactionStatus)
             ]);
         }
 
@@ -428,9 +437,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $merchantAccount = WayforpaySettings::getMerchantAccount();
         $secretKey = WayforpaySettings::getSecretKey();
         if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException(
-                __('Wayforpay gateway is not configured. Cannot process refund.', 'wayforpay-givewp')
-            );
+            throw new PaymentGatewayException('Wayforpay is not configured');
         }
 
         $orderReference = $donation->gatewayTransactionId;
@@ -440,21 +447,19 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(
-                    __('Refund failed: Missing required data. Order: %s, Amount: %s %s', 'wayforpay-givewp'),
+                    'Refund failed: Missing required data. Order: %s, Amount: %s %s',
                     $orderReference,
                     $amount,
                     $currency
                 )
             ]);
-            throw new PaymentGatewayException(
-                __('Cannot process refund: Required transaction data is missing.', 'wayforpay-givewp')
-            );
+            throw new PaymentGatewayException('cannot process refund: required transaction data is missing.');
         }
 
         DonationNote::create([
             'donationId' => $donation->id,
             'content' => sprintf(
-                __('Attempting refund of order %s via Wayforpay for amount %s %s', 'wayforpay-givewp'),
+                'Attempting refund of order %s via Wayforpay for amount %s %s',,
                 $orderReference,
                 $amount,
                 $currency
@@ -469,7 +474,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'orderReference' => $orderReference,
             'amount' => $amount,
             'currency' => $currency,
-            'comment' => __('Refund initiated from GiveWP', 'wayforpay-givewp'),
+            'comment' => 'Refund initiated from GiveWP',
             'apiVersion' => 1,
         ];
         $refundArgs['merchantSignature'] = $this->refundSignature($refundArgs, $secretKey);
@@ -484,14 +489,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (is_wp_error($response)) {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf(
-                    __('Refund failed: Could not connect to Wayforpay. Error: %s', 'wayforpay-givewp'),
-                    $response->get_error_message()
-                )
+                'content' => sprintf('Refund failed: Could not connect to Wayforpay. Error: %s', $response->get_error_message())
             ]);
-            throw new PaymentGatewayException(
-                sprintf('Wayforpay refund request failed: %s', $response->get_error_message())
-            );
+            throw new PaymentGatewayException('could not connect to Wayforpay');
         }
 
         $body = wp_remote_retrieve_body($response);
@@ -499,9 +499,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (!$data) {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => __('Refund failed: Invalid response from Wayforpay.', 'wayforpay-givewp')
+                'content' => sprintf('Refund failed: Invalid JSON body response from Wayforpay: %s', print_r($data, true)),
             ]);
-            throw new PaymentGatewayException('Invalid JSON response from Wayforpay refund API');
+            throw new PaymentGatewayException('invalid response from Wayforpay');
         }
 
         $reason = $data['reason'] ?? null;
@@ -511,7 +511,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(
-                    __('Refund successful via Wayforpay. Status: %s, Reason Code: %s, Reason: %s', 'wayforpay-givewp'),
+                    'Refund successful. Status: %s, Reason Code: %s, Reason: %s',
                     $transactionStatus,
                     $reasonCode,
                     $reason
@@ -523,15 +523,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         DonationNote::create([
             'donationId' => $donation->id,
             'content' => sprintf(
-                __('Refund failed via Wayforpay. Status: %s, Reason Code: %s, Reason: %s', 'wayforpay-givewp'),
+                'Refund failed: Status: %s, Reason Code: %s, Reason: %s',
                 $transactionStatus,
                 $reasonCode,
                 $reason
             )
         ]);
-        throw new PaymentGatewayException(
-            sprintf('Wayforpay refund failed: %s (code: %s)', $reason, $reasonCode)
-        );
+        throw new PaymentGatewayException(sprintf('Refund failed: %s (code: %s)', $reason, $reasonCode));
     }
 
     /**
@@ -617,7 +615,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 $hashFields[] = $data[$key];
             }
         }
-        
         return hash_hmac('md5', implode(';', $hashFields), $secretKey);
     }
 
@@ -643,9 +640,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $period = $subscription->period->getValue();
         $regularMode = $periodMap[$period] ?? null;
         if (empty($regularMode)) {
-            throw new PaymentGatewayException(
-                sprintf(__('Unsupported subscription period: %s', 'wayforpay-givewp'), $period)
-            );
+            throw new PaymentGatewayException(sprintf('unsupported subscription period: %s', $period));
         }
 
         $amount = $donation->amount->formatToDecimal();
@@ -672,11 +667,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     {
         $merchantAccount = WayforpaySettings::getMerchantAccount();
         $merchantPassword = WayforpaySettings::getMerchantPassword();
-
         if (empty($merchantAccount) || empty($merchantPassword)) {
-            throw new PaymentGatewayException(
-                __('Cannot cancel subscription: Merchant password is not configured.', 'wayforpay-givewp')
-            );
+            throw new PaymentGatewayException('Wayforpay is not configured');
         }
 
         $orderReference = $subscription->gatewaySubscriptionId;
@@ -697,9 +689,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             ]),
         ]);
         if (is_wp_error($response)) {
-            throw new PaymentGatewayException(
-                sprintf('Failed to cancel subscription at Wayforpay: %s', $response->get_error_message())
-            );
+            throw new PaymentGatewayException('failed to connect to Wayforpay');
         }
 
         $data = json_decode(wp_remote_retrieve_body($response), true);
@@ -708,7 +698,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         // Reason code 1151 = Regular payment not found (already cancelled or doesn't exist)
         if ($reasonCode !== 1100 && $reasonCode !== 1151) {
             throw new PaymentGatewayException(
-                sprintf('Wayforpay cancellation failed: %s (code: %s)', $data['reason'] ?? null, $reasonCode)
+                sprintf('cancellation failed: %s (code: %s)', $data['reason'] ?? null, $reasonCode)
             );
         }
 
@@ -728,10 +718,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             $subscription->bumpRenewalDate();
             $subscription->save();
 
-            DonationNote::create([
-                'donationId' => $renewal->id,
+            DonationNote::create([ // TODO: should this be a SubscriptionNote?
+                'donationId' => $renewal->id, // TODO: is it correct that renewalId is donationId?
                 'content' => sprintf(
-                    __('Recurring payment successful! Card: %s, Authorization Code: %s', 'wayforpay-givewp'),
+                    'Recurring payment successful! Card: %s, Authorization Code: %s',
                     $data['cardPan'] ?? null, $data['authCode'] ?? null
                 )
             ]);
@@ -739,7 +729,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             DonationNote::create([
                 'donationId' => $subscription->initialDonation()?->id ?? 0,
                 'content' => sprintf(
-                    __('Recurring payment failed. Status: %s, Reason: %s', 'wayforpay-givewp'),
+                    'Recurring payment failed. Status: %s, Reason: %s',
                     $transactionStatus, $data['reasonCode'] ?? null
                 )
             ]);
@@ -748,7 +738,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     private function calculateNextDate(string $period, int $frequency): string
     {
-        $date = new \DateTimeImmutable();
+        $now = new \DateTimeImmutable();
         $modifier = match ($period) {
             'day' => "+{$frequency} days",
             'week' => "+{$frequency} weeks",
@@ -757,6 +747,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'year' => "+{$frequency} years",
             default => "+0 days",
         };
-        return $date->modify($modifier)->format('d.m.Y');
+        return $now->modify($modifier)->format('d.m.Y');
     }
 }
