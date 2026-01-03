@@ -13,6 +13,7 @@ use Give\Framework\PaymentGateways\Contracts\PaymentGatewayRefundable;
 use Give\Framework\PaymentGateways\Contracts\WebhookNotificationsListener;
 use Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException;
 use Give\Subscriptions\Models\Subscription;
+use Give\Subscriptions\Models\SubscriptionNote;
 use Give\Subscriptions\ValueObjects\SubscriptionStatus;
 
 /**
@@ -708,26 +709,26 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     private function handleRenewal(array $data, Subscription $subscription): void
     {
-        $transactionStatus = $data['transactionStatus'] ?? '';
+        $transactionStatus = $data['transactionStatus'] ?? null;
         if ($transactionStatus === 'Approved') {
-            $renewal = $subscription->createRenewal([
-                'gatewayTransactionId' => $data['orderReference'] ?? '',
+            $donation = $subscription->createRenewal([
+                'gatewayTransactionId' => $data['orderReference'] ?? null,
             ]);
-            $renewal->status = DonationStatus::COMPLETE();
-            $renewal->save();
+            $donation->status = DonationStatus::COMPLETE();
+            $donation->save();
             $subscription->bumpRenewalDate();
             $subscription->save();
 
-            DonationNote::create([ // TODO: should this be a SubscriptionNote?
-                'donationId' => $renewal->id, // TODO: is it correct that renewalId is donationId?
+            DonationNote::create([
+                'donationId' => $donation->id,
                 'content' => sprintf(
                     'Recurring payment successful! Card: %s, Authorization Code: %s',
                     $data['cardPan'] ?? null, $data['authCode'] ?? null
                 )
             ]);
         } elseif ($transactionStatus === 'Declined' || $transactionStatus === 'Expired') {
-            DonationNote::create([
-                'donationId' => $subscription->initialDonation()?->id ?? 0,
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
                 'content' => sprintf(
                     'Recurring payment failed. Status: %s, Reason: %s',
                     $transactionStatus, $data['reasonCode'] ?? null
