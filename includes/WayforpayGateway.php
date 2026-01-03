@@ -19,6 +19,7 @@ use WayForPay\SDK\Credential\AccountSecretCredential;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
 use WayForPay\SDK\Wizard\PurchaseWizard;
+use WayForPay\SDK\Wizard\RefundWizard;
 
 /**
  * @inheritDoc
@@ -440,6 +441,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (empty($merchantAccount) || empty($secretKey)) {
             throw new PaymentGatewayException('Wayforpay is not configured');
         }
+        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
 
         $orderReference = $donation->gatewayTransactionId;
         $amount = $donation->amount->formatToDecimal();
@@ -467,55 +469,29 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             )
         ]);
 
-        // Build refund request per Wayforpay API:
-        // https://github.com/wayforpay/php-sdk/blob/master/src/Request/RefundRequest.php
-        $refundArgs = [
-            'transactionType' => 'REFUND',
-            'merchantAccount' => $merchantAccount,
-            'orderReference' => $orderReference,
-            'amount' => $amount,
-            'currency' => $currency,
-            'comment' => 'Refund initiated from GiveWP',
-            'apiVersion' => 1,
-        ];
-        $refundArgs['merchantSignature'] = $this->refundSignature($refundArgs, $secretKey);
-        $response = wp_remote_post(self::WAYFORPAY_API_URL, [
-            'timeout' => 30,
-            'headers' => [
-                'Content-Type' => 'application/json; charset=utf-8',
-            ],
-            'body' => wp_json_encode($refundArgs),
-        ]);
-
-        if (is_wp_error($response)) {
+        try {
+            $response = RefundWizard::get($creds)
+                ->setOrderReference($orderReference)
+                ->setAmount($amount)
+                ->setCurrency($currency)
+                ->setComment('Refund initiated from GiveWP')
+                ->getRequest()
+                ->send();
+        } catch (Exception $e) {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf('Refund failed: Could not connect to Wayforpay. Error: %s', $response->get_error_message())
+                'content' => sprintf('Refund failed: Could not connect to Wayforpay. Error: %s', $e->getMessage())
             ]);
             throw new PaymentGatewayException('could not connect to Wayforpay');
         }
 
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-        if (!$data) {
-            DonationNote::create([
-                'donationId' => $donation->id,
-                'content' => sprintf('Refund failed: Invalid JSON body response from Wayforpay: %s', print_r($data, true)),
-            ]);
-            throw new PaymentGatewayException('invalid response from Wayforpay');
-        }
-
-        $reason = $data['reason'] ?? null;
-        $reasonCode = $data['reasonCode'] ?? null;
-        $transactionStatus = $data['transactionStatus'] ?? null;
-        if ($reasonCode === 1100 || $transactionStatus === 'Refunded') { // reasonCode 1100 = OK
+        if ($response->getReason()->isOK()) {
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(
-                    'Refund successful. Status: %s, Reason Code: %s, Reason: %s',
-                    $transactionStatus,
-                    $reasonCode,
-                    $reason
+                    'Refund approved. Status: %s. Order: %s',
+                    $response->getTransactionStatus(),
+                    $response->getOrderReference()
                 )
             ]);
             return new PaymentRefunded();
@@ -524,13 +500,16 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         DonationNote::create([
             'donationId' => $donation->id,
             'content' => sprintf(
-                'Refund failed: Status: %s, Reason Code: %s, Reason: %s',
-                $transactionStatus,
-                $reasonCode,
-                $reason
+                'Refund declined. Status: %s. Reason: %s',
+                $response->getTransactionStatus(),
+                $response->getReason()->getMessage()
             )
         ]);
-        throw new PaymentGatewayException(sprintf('Refund failed: %s (code: %s)', $reason, $reasonCode));
+        throw new PaymentGatewayException(sprintf(
+            'Refund declined: %s (Code: %s)',
+            $response->getTransactionStatus(),
+            $response->getReason()->getCode()
+        ));
     }
 
     /**
@@ -569,21 +548,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'orderReference',
             'status',
             'time',
-        ];
-        return $this->createSignature($args, $signatureKeys, $secretKey);
-    }
-
-    /**
-     * HMAC-MD5 signature for refund requests to the Wayforpay payment API.
-     * @see https://github.com/wayforpay/php-sdk/blob/master/src/Request/RefundRequest.php
-     */
-    private function refundSignature(array $args, string $secretKey): string
-    {
-        $signatureKeys = [
-            'merchantAccount',
-            'orderReference',
-            'amount',
-            'currency',
         ];
         return $this->createSignature($args, $signatureKeys, $secretKey);
     }
