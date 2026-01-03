@@ -4,7 +4,8 @@
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
-        "php": ">=8.0"
+        "php": ">=8.0",
+        "wayforpay/php-sdk": "^1.0"
     },
     "require-dev": {
         "wpackagist-plugin/give": "^4.0",
@@ -24,6 +25,9 @@
         "allow-plugins": {
             "composer/installers": true
         }
+    },
+    "scripts": {
+        "zip": "composer install --no-dev --optimize-autoloader && zip -q -r wayforpay-givewp.zip . -x \".git/*\" \".vscode/*\" \".idea/*\" \"tests/*\" \"phpunit.xml\" \"phpcs.xml\" \"*.zip\" && composer install"
     },
     "extra": {
         "installer-paths": {
