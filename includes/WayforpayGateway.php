@@ -35,7 +35,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     /**
      * @inheritDoc
-     * 
+     *
      * Note: secureRouteMethods cannot yet be used. Wayforpay allows max 256 chars for returnUrl/serviceUrl.
      * The addition of additional signature params in the URLs surpasses these 256 chars.
      * It is likely that a feature request to Wayforpay will be needed.
