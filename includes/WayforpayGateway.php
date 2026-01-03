@@ -5,7 +5,6 @@ use Give\Donations\Models\DonationNote;
 use Give\Donations\ValueObjects\DonationStatus;
 use Give\Framework\Exceptions\Primitives\Exception;
 use Give\Framework\Http\Response\Types\RedirectResponse;
-use Give\Framework\Http\Response\Types\JsonResponse;
 use Give\Framework\PaymentGateways\Commands\PaymentRefunded;
 use Give\Framework\PaymentGateways\Commands\RedirectOffsite;
 use Give\Framework\PaymentGateways\PaymentGateway;
@@ -105,7 +104,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     {
         // For legacy forms, show a simple help text as a fallback.
         return "<div class='wayforpay-gateway-help-text'>
-                    <p>" . esc_html__(this->formSettings($formId)['message'], 'wayforpay-givewp') . "</p>
+                    <p>" . esc_html__($this->formSettings($formId)['message'], 'wayforpay-givewp') . "</p>
                 </div>";
     }
 
