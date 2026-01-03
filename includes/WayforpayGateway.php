@@ -195,12 +195,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         try {
             $wayforpayRequest = [
-                'timeout'     => 10,
-                'headers'     => [
-                    'Content-Type'  => 'application/x-www-form-urlencoded; charset=utf-8',
+                'timeout' => 10,
+                'headers' => [
+                    'Content-Type' => 'application/x-www-form-urlencoded; charset=utf-8',
                 ],
                 // Uses form encoding for the arguments within the body.
-                'body'        => http_build_query($wayforpayArgs),
+                'body' => http_build_query($wayforpayArgs),
                 // The server should not redirect to Wayforpay's provided redirect URL.
                 // Instead, the server will pass the redirect location to the browser.
                 'redirection' => 0,
@@ -227,7 +227,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                     'donationId' => $donation->id,
                     'content' => sprintf(
                         'Payment failed: Expected Wayforpay to redirect but got HTTP %d. Response: %s',
-                        $httpCode, $responseBody)
+                        $httpCode,
+                        $responseBody
+                    )
                 ]);
                 throw new PaymentGatewayException('no redirect HTTP code provided');
             }
@@ -329,7 +331,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     public function webhookNotificationsListener(): void
     {
-        $requestData = give_clean($_REQUEST);
+        $queryParams = give_clean($_REQUEST);
         // Wayforpay sends webhook data as JSON in the request body
         $rawBody = file_get_contents('php://input');
         $data = json_decode($rawBody, true);
@@ -363,7 +365,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         // Handle subscription renewal webhooks.
         // If subscription-id is present, it's a renewal webhook.
-        $subscriptionId = $requestData['subscription-id'] ?? null;
+        $subscriptionId = $queryParams['subscription-id'] ?? null;
         if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
             if (empty($subscription)) {
@@ -400,8 +402,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        'Payment successful. Card: %s, Authorization Code: %s',,
-                        $data['cardPan'] ?? null, $data['authCode'] ?? null
+                        'Payment successful. Card: %s, Authorization Code: %s',
+                        $data['cardPan'] ?? null,
+                        $data['authCode'] ?? null
                     )
                 ]);
             }
@@ -415,7 +418,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                     'donationId' => $donation->id,
                     'content' => sprintf(
                         'Payment declined. Status: %s. Reason code: %s',
-                        $transactionStatus, $data['reasonCode'] ?? null
+                        $transactionStatus,
+                        $data['reasonCode'] ?? null
                     )
                 ]);
             }
@@ -460,7 +464,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         DonationNote::create([
             'donationId' => $donation->id,
             'content' => sprintf(
-                'Attempting refund of order %s via Wayforpay for amount %s %s',,
+                'Attempting refund of order %s via Wayforpay for amount %s %s',
                 $orderReference,
                 $amount,
                 $currency
@@ -559,7 +563,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     private function serviceUrlSignature(array $args, string $secretKey): string
     {
-         $signatureKeys = [
+        $signatureKeys = [
             'merchantAccount',
             'orderReference',
             'amount',
@@ -610,7 +614,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             }
             if (is_array($data[$key])) {
                 foreach ($data[$key] as $value) {
-                     $hashFields[] = $value;
+                    $hashFields[] = $value;
                 }
             } else {
                 $hashFields[] = $data[$key];
@@ -723,7 +727,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 'donationId' => $donation->id,
                 'content' => sprintf(
                     'Recurring payment successful! Card: %s, Authorization Code: %s',
-                    $data['cardPan'] ?? null, $data['authCode'] ?? null
+                    $data['cardPan'] ?? null,
+                    $data['authCode'] ?? null
                 )
             ]);
         } elseif ($transactionStatus === 'Declined' || $transactionStatus === 'Expired') {
@@ -731,7 +736,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 'subscriptionId' => $subscription->id,
                 'content' => sprintf(
                     'Recurring payment failed. Status: %s, Reason: %s',
-                    $transactionStatus, $data['reasonCode'] ?? null
+                    $transactionStatus,
+                    $data['reasonCode'] ?? null
                 )
             ]);
         }
