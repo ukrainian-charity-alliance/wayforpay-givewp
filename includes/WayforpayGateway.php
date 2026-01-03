@@ -25,7 +25,6 @@ use WayForPay\SDK\Wizard\PurchaseWizard;
  */
 class WayforpayGateway extends PaymentGateway implements WebhookNotificationsListener, PaymentGatewayRefundable
 {
-    private const WAYFORPAY_PAY_URL = 'https://secure.wayforpay.com/pay';
     private const WAYFORPAY_API_URL = 'https://api.wayforpay.com/api';
     private const WAYFORPAY_RECURRING_API_URL = 'https://api.wayforpay.com/regularApi';
 
@@ -176,14 +175,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 ->setLanguage(substr(get_bloginfo('language'), 0, 2))
                 ->setMerchantTransactionSecureType('AUTO'); // Default as per previous code
 
-            // tailored for "Step 1" - we are not yet fully refactoring Subscriptions to use Wizard objects,
-            // so we merge extra args manually.
-            // Generate basic form data:
-            $wayforpayArgs = array_filter($wizard->getForm()->getData()); // array_filter to exclude null values from URL params.
-
-            // Merge legacy/extra args (e.g. for recurring support)
-            // Note: These extra args are NOT part of the standard signature calculation in the previous code,
-            // so adding them here after signature generation (which happens inside getData) maintains behavior.
+            $form = $wizard->getForm();
+            $wayforpayArgs = array_filter($form->getData()); // array_filter to exclude null values from URL params.
+            // Additional functionality (i.e. recurring payments) should be passed in as args by the caller.
             $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
 
             DonationNote::create([
@@ -207,7 +201,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 // Instead, the server will pass the redirect location to the browser.
                 'redirection' => 0,
             ];
-            $wayforpayResponse = wp_remote_post(self::WAYFORPAY_PAY_URL, $wayforpayRequest);
+            $wayforpayResponse = wp_remote_post($form->getEndpoint()->getUrl(), $wayforpayRequest);
 
             $responseBody = wp_remote_retrieve_body($wayforpayResponse);
             $responseHeaders = wp_remote_retrieve_headers($wayforpayResponse);
