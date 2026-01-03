@@ -23,6 +23,9 @@ define('WAYFORPAY_GIVEWP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAYFORPAY_GIVEWP_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 // Load dependencies
+if (file_exists(WAYFORPAY_GIVEWP_PLUGIN_DIR . 'vendor/autoload.php')) {
+    require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'vendor/autoload.php';
+}
 require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/WayforpaySettings.php';
 
 /**

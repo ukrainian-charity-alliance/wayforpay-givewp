@@ -14,6 +14,11 @@ use Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException;
 use Give\Subscriptions\Models\Subscription;
 use Give\Subscriptions\Models\SubscriptionNote;
 use Give\Subscriptions\ValueObjects\SubscriptionStatus;
+use WayForPay\SDK\Collection\ProductCollection;
+use WayForPay\SDK\Credential\AccountSecretCredential;
+use WayForPay\SDK\Domain\Client;
+use WayForPay\SDK\Domain\Product;
+use WayForPay\SDK\Wizard\PurchaseWizard;
 
 /**
  * @inheritDoc
@@ -130,6 +135,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (empty($merchantAccount) || empty($secretKey)) {
             throw new PaymentGatewayException('Wayforpay is not configured');
         }
+        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
 
         $returnUrl = $this->generateGatewayRouteUrl(
             'handleReturnUrl',
@@ -138,7 +144,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $serviceUrl = $this->webhook->getNotificationUrl($serviceUrlParams);
         $amount = $donation->amount->formatToDecimal();
         $currency = strtoupper($donation->amount->getCurrency()->getCode());
-        // A Donation may have multiple payment attempts; orderReference should differ from donationId.
         $orderReference = $donation->id . '-' . time();
 
         $campaign = $donation->campaign()->get();
@@ -150,49 +155,47 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             ]);
             throw new PaymentGatewayException('missing campaign');
         }
-
-        $wayforpayArgs = [
-            'merchantAccount' => $merchantAccount,
-            'merchantAuthType' => 'simpleSignature',
-            'merchantDomainName' => wp_parse_url(home_url(), PHP_URL_HOST),
-            'merchantTransactionSecureType' => 'AUTO',
-
-            'orderReference' => $orderReference,
-            'orderDate' => $donation->createdAt->getTimestamp(), // TODO: consider making this time() to support recurring better.
-            'currency' => $currency,
-            'amount' => $amount,
-            'returnUrl' => $returnUrl,
-            'serviceUrl' => $serviceUrl,
-            'language' => substr(get_bloginfo('language'), 0, 2),
-            'productName' => [$campaignTitle],
-            'productPrice' => [$amount],
-            'productCount' => [1],
-        ];
         // Wayforpay supports sending optional client metadata. This can help with analytics on the Wayforpay side.
-        if (!empty($donation->firstName)) {
-            $wayforpayArgs['clientFirstName'] = $donation->firstName;
-        }
-        if (!empty($donation->lastName)) {
-            $wayforpayArgs['clientLastName'] = $donation->lastName;
-        }
-        if (!empty($donation->email)) {
-            $wayforpayArgs['clientEmail'] = $donation->email;
-        }
-        // Additional functionality (i.e. recurring payments) should be passed in as args by the caller.
-        $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
-        $wayforpayArgs['merchantSignature'] = $this->paymentSignature($wayforpayArgs, $secretKey);
-
-        DonationNote::create([
-            'donationId' => $donation->id,
-            'content' => sprintf(
-                'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s',
-                $wayforpayArgs['orderReference'],
-                $wayforpayArgs['amount'],
-                $wayforpayArgs['currency']
-            )
-        ]);
+        $client = new Client(
+            nameFirst: $donation->firstName,
+            nameLast: $donation->lastName,
+            email: $donation->email,
+        );
 
         try {
+            $wizard = PurchaseWizard::get($creds)
+                ->setOrderReference($orderReference)
+                ->setAmount($amount)
+                ->setCurrency($currency)
+                ->setOrderDate(new \DateTime('@' . $donation->createdAt->getTimestamp()))
+                ->setMerchantDomainName(wp_parse_url(home_url(), PHP_URL_HOST))
+                ->setClient($client)
+                ->setProducts(new ProductCollection([new Product($campaignTitle, $amount, 1)]))
+                ->setReturnUrl($returnUrl)
+                ->setServiceUrl($serviceUrl)
+                ->setLanguage(substr(get_bloginfo('language'), 0, 2))
+                ->setMerchantTransactionSecureType('AUTO'); // Default as per previous code
+
+            // tailored for "Step 1" - we are not yet fully refactoring Subscriptions to use Wizard objects,
+            // so we merge extra args manually.
+            // Generate basic form data:
+            $wayforpayArgs = array_filter($wizard->getForm()->getData()); // array_filter to exclude null values from URL params.
+
+            // Merge legacy/extra args (e.g. for recurring support)
+            // Note: These extra args are NOT part of the standard signature calculation in the previous code,
+            // so adding them here after signature generation (which happens inside getData) maintains behavior.
+            $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
+
+            DonationNote::create([
+                'donationId' => $donation->id,
+                'content' => sprintf(
+                    'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s',
+                    $wayforpayArgs['orderReference'],
+                    $wayforpayArgs['amount'],
+                    $wayforpayArgs['currency']
+                )
+            ]);
+
             $wayforpayRequest = [
                 'timeout' => 10,
                 'headers' => [
@@ -540,21 +543,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      * HMAC-MD5 signature for making requests to the Wayforpay payment API.
      * @see https://wiki.wayforpay.com/en/view/852102
      */
-    private function paymentSignature(array $args, string $secretKey): string
-    {
-        $signatureKeys = [
-            'merchantAccount',
-            'merchantDomainName',
-            'orderReference',
-            'orderDate',
-            'amount',
-            'currency',
-            'productName',
-            'productCount',
-            'productPrice',
-        ];
-        return $this->createSignature($args, $signatureKeys, $secretKey);
-    }
+    // paymentSignature removed as it is now handled by Wayforpay SDK PurchaseWizard.
+
 
     /**
      * HMAC-MD5 signature for Wayforpay requests to serviceUrl.
