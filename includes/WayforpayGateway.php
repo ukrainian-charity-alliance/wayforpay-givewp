@@ -15,7 +15,6 @@ use Give\Subscriptions\Models\Subscription;
 use Give\Subscriptions\Models\SubscriptionNote;
 use Give\Subscriptions\ValueObjects\SubscriptionStatus;
 use WayForPay\SDK\Collection\ProductCollection;
-use WayForPay\SDK\Credential\AccountSecretCredential;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
 use WayForPay\SDK\Domain\Regular;
@@ -34,9 +33,6 @@ use WayForPay\SDK\Wizard\RefundWizard;
  */
 class WayforpayGateway extends PaymentGateway implements WebhookNotificationsListener, PaymentGatewayRefundable
 {
-    private const WAYFORPAY_API_URL = 'https://api.wayforpay.com/api';
-    private const WAYFORPAY_RECURRING_API_URL = 'https://api.wayforpay.com/regularApi';
-
     /**
      * @inheritDoc
      */
@@ -138,12 +134,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         array $serviceUrlParams = [],
         ?Regular $recurringPayment = null
     ): RedirectOffsite {
-        $merchantAccount = WayforpaySettings::getMerchantAccount();
-        $secretKey = WayforpaySettings::getSecretKey();
-        if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException('Wayforpay is not configured');
-        }
-        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
+        $creds = WayforpaySettings::getCredentials();
 
         $returnUrl = $this->generateGatewayRouteUrl(
             'handleReturnUrl',
@@ -276,12 +267,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     protected function handleReturnUrl(array $queryParams): RedirectResponse
     {
-        $merchantAccount = WayforpaySettings::getMerchantAccount();
-        $secretKey = WayforpaySettings::getSecretKey();
-        if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException('Wayforpay is not configured');
-        }
-        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
+        $creds = WayforpaySettings::getCredentials();
 
         // WayForPay may POST transaction data here, but we don't rely on it for status updates.
         // The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
@@ -358,12 +344,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     public function webhookNotificationsListener(): void
     {
-        $merchantAccount = WayforpaySettings::getMerchantAccount();
-        $secretKey = WayforpaySettings::getSecretKey();
-        if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException('Wayforpay is not configured');
-        }
-        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
+        $creds = WayforpaySettings::getCredentials();
 
         $handler = new ServiceUrlHandler($creds);
         try {
@@ -453,12 +434,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     public function refundDonation(Donation $donation): PaymentRefunded
     {
-        $merchantAccount = WayforpaySettings::getMerchantAccount();
-        $secretKey = WayforpaySettings::getSecretKey();
-        if (empty($merchantAccount) || empty($secretKey)) {
-            throw new PaymentGatewayException('Wayforpay is not configured');
-        }
-        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
+        $creds = WayforpaySettings::getCredentials();
 
         $orderReference = $donation->gatewayTransactionId;
         $amount = $donation->amount->formatToDecimal();
@@ -577,11 +553,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     public function cancelSubscription(Subscription $subscription): void
     {
-        $merchantAccount = WayforpaySettings::getMerchantAccount();
-        $merchantPassword = WayforpaySettings::getMerchantPassword();
-        if (empty($merchantAccount) || empty($merchantPassword)) {
-            throw new PaymentGatewayException('Wayforpay is not configured');
-        }
+        $passwordCreds = WayforpaySettings::getPasswordCredentials();
 
         $orderReference = $subscription->gatewaySubscriptionId;
         if (empty($orderReference)) {
@@ -591,7 +563,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         }
 
         // PHP SDK for Wayforpay doesn't have a REMOVE requestType for the regularApi; define a custom request for it.
-        $request = new class ($merchantAccount, $merchantPassword, $orderReference) implements RequestInterface {
+        $request = new class ($passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference) implements RequestInterface {
             private $account;
             private $password;
             private $orderReference;

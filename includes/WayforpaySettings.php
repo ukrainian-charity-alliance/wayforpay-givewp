@@ -14,10 +14,14 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+use Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException;
+use WayForPay\SDK\Credential\AccountSecretCredential;
+use WayForPay\SDK\Credential\AccountPasswordCredential;
+
 /**
  * Class WayforpaySettings
  *
- * Handles admin settings registration and rendering for Wayforpay gateway.
+ * Handles admin settings registration, rendering, and credential access for Wayforpay gateway.
  */
 class WayforpaySettings
 {
@@ -135,7 +139,7 @@ class WayforpaySettings
         ];
     }
 
-    public static function getMerchantAccount(): string
+    private static function getMerchantAccount(): string
     {
         if (self::isTestMode()) {
             return give_get_option('wayforpay_test_merchant_account', '');
@@ -143,7 +147,7 @@ class WayforpaySettings
         return give_get_option('wayforpay_merchant_account', '');
     }
 
-    public static function getSecretKey(): string
+    private static function getSecretKey(): string
     {
         if (self::isTestMode()) {
             return give_get_option('wayforpay_test_secret_key', '');
@@ -151,7 +155,7 @@ class WayforpaySettings
         return give_get_option('wayforpay_secret_key', '');
     }
 
-    public static function getMerchantPassword(): string
+    private static function getMerchantPassword(): string
     {
         if (self::isTestMode()) {
             return give_get_option('wayforpay_test_merchant_password', '');
@@ -159,8 +163,38 @@ class WayforpaySettings
         return give_get_option('wayforpay_merchant_password', '');
     }
 
-    public static function isTestMode(): bool
+    private static function isTestMode(): bool
     {
         return give_is_test_mode(); // Reuse the GiveWP test mode setting.
+    }
+
+    /**
+     * For API requests that use signature validation.
+     *
+     * @throws PaymentGatewayException If credentials are not configured
+     */
+    public static function getCredentials(): AccountSecretCredential
+    {
+        $account = self::getMerchantAccount();
+        $secret = self::getSecretKey();
+        if (empty($account) || empty($secret)) {
+            throw new PaymentGatewayException('Wayforpay is not configured');
+        }
+        return new AccountSecretCredential($account, $secret);
+    }
+
+    /**
+     * For API requests that use password authentication.
+     *
+     * @throws PaymentGatewayException If credentials are not configured
+     */
+    public static function getPasswordCredentials(): AccountPasswordCredential
+    {
+        $account = self::getMerchantAccount();
+        $password = self::getMerchantPassword();
+        if (empty($account) || empty($password)) {
+            throw new PaymentGatewayException('Wayforpay is not configured');
+        }
+        return new AccountPasswordCredential($account, $password);
     }
 }
