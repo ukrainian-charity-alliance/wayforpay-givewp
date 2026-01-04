@@ -378,7 +378,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         };
 
         // Handle subscription renewal webhooks.
-        // If subscription-id is present, it's a renewal webhook.
+        // If subscription-id is present, it may be a renewal or the initial subscription payment.
         $subscriptionId = $queryParams['subscription-id'] ?? null;
         if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
@@ -386,8 +386,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 status_header(404);
                 exit('Subscription not found');
             }
-            $this->handleRenewal($transaction, $subscription);
-            $sendAckResponse();
+            // Only handle as renewal if it's not the initial payment (donation already complete).
+            if ($donation->status->isComplete()) {
+                $this->handleRenewal($transaction, $subscription);
+                $sendAckResponse();
+            }
+            // For initial subscription payments, fall through to update the donation status below.
         }
 
         if ($transaction->isStatusApproved()) {
