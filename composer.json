@@ -4,7 +4,7 @@
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {
-        "php": ">=8.0",
+        "php": ">=8.3",
         "wayforpay/php-sdk": "^1.0"
     },
     "require-dev": {

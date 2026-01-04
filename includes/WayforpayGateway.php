@@ -29,64 +29,46 @@ use WayForPay\SDK\Response\ServiceResponse;
 use WayForPay\SDK\Wizard\PurchaseWizard;
 use WayForPay\SDK\Wizard\RefundWizard;
 
-/**
- * @inheritDoc
- */
 class WayforpayGateway extends PaymentGateway implements WebhookNotificationsListener, PaymentGatewayRefundable
 {
-    /**
-     * @inheritDoc
-     */
     public $routeMethods = [
         'handleReturnUrl',
         'webhookNotificationsListener',
     ];
 
     /**
-     * @inheritDoc
-     *
      * Note: secureRouteMethods cannot yet be used. Wayforpay allows max 256 chars for returnUrl/serviceUrl.
      * The addition of additional signature params in the URLs surpasses these 256 chars.
      * It is likely that a feature request to Wayforpay will be needed.
      */
     public $secureRouteMethods = [];
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public static function id(): string
     {
         return 'wayforpay-gateway';
     }
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public function getId(): string
     {
         return self::id();
     }
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public function getName(): string
     {
         return __('Wayforpay Gateway', 'wayforpay-givewp');
     }
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public function getPaymentMethodLabel(): string
     {
         return __('Wayforpay', 'wayforpay-givewp');
     }
 
-    /**
-     * Register a js file to display gateway fields for v3 donation forms
-     */
-    public function enqueueScript(int $formId)
+    #[\Override]
+    public function enqueueScript(int $formId): void
     {
         // Support for forms built with the Visual Form Builder.
         wp_enqueue_script(
@@ -98,6 +80,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         );
     }
 
+    #[\Override]
     public function formSettings(int $formId): array
     {
         // The form settings to send to the JS counterpart.
@@ -107,9 +90,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         ];
     }
 
-    /**
-     * @inheritDoc
-     */
     public function getLegacyFormFieldMarkup(int $formId, array $args): string
     {
         // For legacy forms, show a simple help text as a fallback.
@@ -118,9 +98,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 </div>";
     }
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public function createPayment(Donation $donation, $gatewayData): RedirectOffsite
     {
         $serviceUrlParams = ['donation-id' => $donation->id];
@@ -344,6 +322,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      * Allows updating donation status even if user closes the browser on the Wayforpay site.
      * WayForPay will retry this endpoint periodically until it receives a valid acknowledgment.
      */
+    #[\Override]
     public function webhookNotificationsListener(): void
     {
         $creds = WayforpaySettings::getCredentials();
@@ -435,9 +414,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $sendAckResponse();
     }
 
-    /**
-     * @inheritDoc
-     */
+    #[\Override]
     public function refundDonation(Donation $donation): PaymentRefunded
     {
         $creds = WayforpaySettings::getCredentials();
@@ -687,6 +664,7 @@ class RemoveSubscriptionRequest implements RequestInterface
         $this->orderReference = $orderReference;
     }
 
+    #[\Override]
     public function getTransactionData(): array
     {
         return [
@@ -697,21 +675,25 @@ class RemoveSubscriptionRequest implements RequestInterface
         ];
     }
 
+    #[\Override]
     public function getTransactionType(): string
     {
         return 'REMOVE';
     }
 
+    #[\Override]
     public function getEndpoint(): EndpointInterface
     {
         return new ApiRegularEndpoint();
     }
 
+    #[\Override]
     public function setEndpoint(EndpointInterface $endpoint): self
     {
         return $this; // No-op, endpoint is fixed.
     }
 
+    #[\Override]
     public function getResponse(array $data): ServiceResponse
     {
         return new ServiceResponse($data);

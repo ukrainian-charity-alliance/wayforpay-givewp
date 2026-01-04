@@ -4,7 +4,7 @@
  * Description: An implementation of Wayforpay as a GiveWP payment gateway.
  * Version: 0.1.0
  * Requires at least: 6.6
- * Requires PHP: 8.1
+ * Requires PHP: 8.3
  * Requires Plugins: give
  * Author: Ukrainian Charity Alliance
  * Author URI: https://uba.com.ua
