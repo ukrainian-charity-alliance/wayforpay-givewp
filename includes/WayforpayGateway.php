@@ -569,7 +569,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (empty($orderReference)) {
             SubscriptionNote::create([
                 'subscriptionId' => $subscription->id,
-                'content' => 'Subscription cancelled. No order reference was registered; no cancellation necessary with Wayforpay.'
+                'content' => 'Subscription cancelled. No Gateway Subscription ID; no cancellation necessary with Wayforpay.'
             ]);
             $subscription->status = SubscriptionStatus::CANCELLED();
             $subscription->save();
@@ -578,53 +578,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         SubscriptionNote::create([
             'subscriptionId' => $subscription->id,
-            'content' => sprintf('Attempting to remove subscription in Wayforpay. Order reference: %s', $orderReference)
+            'content' => sprintf('Attempting to remove subscription %s in Wayforpay.', $orderReference)
         ]);
 
-        // PHP SDK for Wayforpay doesn't have a REMOVE requestType for the regularApi; define a custom request for it.
-        $request = new class ($passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference) implements RequestInterface {
-            private $account;
-            private $password;
-            private $orderReference;
-
-            public function __construct($account, $password, $orderReference)
-            {
-                $this->account = $account;
-                $this->password = $password;
-                $this->orderReference = $orderReference;
-            }
-
-            public function getTransactionData()
-            {
-                return [
-                    'requestType' => 'REMOVE',
-                    'merchantAccount' => $this->account,
-                    'merchantPassword' => $this->password,
-                    'orderReference' => $this->orderReference,
-                ];
-            }
-
-            public function getTransactionType()
-            {
-                return 'REMOVE';
-            }
-
-            public function getEndpoint()
-            {
-                return new ApiRegularEndpoint();
-            }
-
-            public function setEndpoint(EndpointInterface $endpoint)
-            {
-                return $this; // No-op.
-            }
-
-            public function getResponse(array $data)
-            {
-                return new ServiceResponse($data);
-            }
-        };
-
+        $request = new RemoveSubscriptionRequest($passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference);
         try {
             $transformer = new CurlRequestTransformer();
             /** @var ServiceResponse $response */
@@ -655,7 +612,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if ($reason->isOK()) {
             SubscriptionNote::create([
                 'subscriptionId' => $subscription->id,
-                'content' => 'Succeeded removing subscription in Wayforpay.'
+                'content' => 'Successfully removed subscription in Wayforpay.'
             ]);
         } else {
             SubscriptionNote::create([
@@ -710,5 +667,53 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             default => "+0 days",
         };
         return $now->modify($modifier)->format('d.m.Y');
+    }
+}
+
+/**
+ * Custom request for removing a subscription from Wayforpay.
+ * The Wayforpay SDK doesn't provide this request type, so we implement it here.
+ */
+class RemoveSubscriptionRequest implements RequestInterface
+{
+    private string $account;
+    private string $password;
+    private string $orderReference;
+
+    public function __construct(string $account, string $password, string $orderReference)
+    {
+        $this->account = $account;
+        $this->password = $password;
+        $this->orderReference = $orderReference;
+    }
+
+    public function getTransactionData(): array
+    {
+        return [
+            'requestType' => 'REMOVE',
+            'merchantAccount' => $this->account,
+            'merchantPassword' => $this->password,
+            'orderReference' => $this->orderReference,
+        ];
+    }
+
+    public function getTransactionType(): string
+    {
+        return 'REMOVE';
+    }
+
+    public function getEndpoint(): EndpointInterface
+    {
+        return new ApiRegularEndpoint();
+    }
+
+    public function setEndpoint(EndpointInterface $endpoint): self
+    {
+        return $this; // No-op, endpoint is fixed.
+    }
+
+    public function getResponse(array $data): ServiceResponse
+    {
+        return new ServiceResponse($data);
     }
 }
