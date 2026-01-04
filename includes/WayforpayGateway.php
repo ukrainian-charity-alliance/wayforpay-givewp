@@ -18,6 +18,7 @@ use WayForPay\SDK\Collection\ProductCollection;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
 use WayForPay\SDK\Domain\Regular;
+use WayForPay\SDK\Domain\Reason;
 use WayForPay\SDK\Domain\TransactionService;
 use WayForPay\SDK\Client\CurlRequestTransformer;
 use WayForPay\SDK\Contract\EndpointInterface;
@@ -191,10 +192,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(
-                    'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s',
+                    'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s%s',
                     $wayforpayArgs['orderReference'],
                     $wayforpayArgs['amount'],
-                    $wayforpayArgs['currency']
+                    $wayforpayArgs['currency'],
+                    $recurringPayment ? ' (recurring)' : ''
                 )
             ]);
 
@@ -565,10 +567,19 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         $orderReference = $subscription->gatewaySubscriptionId;
         if (empty($orderReference)) {
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
+                'content' => 'Subscription cancelled. No order reference was registered; no cancellation necessary with Wayforpay.'
+            ]);
             $subscription->status = SubscriptionStatus::CANCELLED();
             $subscription->save();
             return;
         }
+
+        SubscriptionNote::create([
+            'subscriptionId' => $subscription->id,
+            'content' => sprintf('Attempting to remove subscription in Wayforpay. Order reference: %s', $orderReference)
+        ]);
 
         // PHP SDK for Wayforpay doesn't have a REMOVE requestType for the regularApi; define a custom request for it.
         $request = new class ($passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference) implements RequestInterface {
@@ -619,14 +630,41 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             /** @var ServiceResponse $response */
             $response = $transformer->transform($request);
         } catch (\Exception $e) {
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
+                'content' => sprintf('Failed to connect to Wayforpay: %s', $e->getMessage())
+            ]);
             throw new PaymentGatewayException('failed to connect to Wayforpay: ' . $e->getMessage());
         }
 
         $reason = $response->getReason();
-        if (!$reason->isOK()) {
+        if (!$reason->isOK() && $reason->getCode() !== Reason::CODE_ORDER_NOT_FOUND) {
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
+                'content' => sprintf(
+                    'Failed to remove subscription in Wayforpay: %s (code: %s)',
+                    $reason->getMessage(),
+                    $reason->getCode()
+                )
+            ]);
             throw new PaymentGatewayException(
                 sprintf('cancellation failed: %s (code: %s)', $reason->getMessage(), $reason->getCode())
             );
+        }
+
+        if ($reason->isOK()) {
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
+                'content' => 'Succeeded removing subscription in Wayforpay.'
+            ]);
+        } else {
+            SubscriptionNote::create([
+                'subscriptionId' => $subscription->id,
+                'content' => sprintf(
+                    'Wayforpay did not find the subscription (code: %s). Locally marking Subscription as cancelled.',
+                    $reason->getCode()
+                )
+            ]);
         }
 
         $subscription->status = SubscriptionStatus::CANCELLED();
@@ -639,10 +677,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             $donation = $subscription->createRenewal([
                 'gatewayTransactionId' => $transaction->getOrderReference(),
             ]);
-            $donation->status = DonationStatus::COMPLETE();
-            $donation->save();
-            $subscription->bumpRenewalDate();
-            $subscription->save();
 
             DonationNote::create([
                 'donationId' => $donation->id,
