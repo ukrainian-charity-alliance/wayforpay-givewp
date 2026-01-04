@@ -533,12 +533,16 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         $amount = $donation->amount->formatToDecimal();
         $dateNext = new \DateTime($this->calculateNextDate($period, $subscription->frequency));
+        // Indefinite subscription; Wayforpay doesn't have an explicit indefinite mode, so use a far in the future date.
+        $dateEnd = $subscription->installments === 0 ? new \DateTime('+100 years') : null;
+        // Fixed installments; subtract one payment because the initial payment is made too.
+        $count = $subscription->installments > 0 ? $subscription->installments - 1 : null;
         $recurringPayment = new Regular(
             modes: [$regularMode],
             amount: $amount,
             dateNext: $dateNext,
-            dateEnd: null,
-            count: $subscription->installments > 0 ? $subscription->installments - 1 : null,
+            dateEnd: $dateEnd,
+            count: $count,
             on: true,
             behavior: Regular::BEHAVIOR_PRESET
         );
