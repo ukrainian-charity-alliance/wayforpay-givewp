@@ -18,6 +18,7 @@ use WayForPay\SDK\Collection\ProductCollection;
 use WayForPay\SDK\Credential\AccountSecretCredential;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
+use WayForPay\SDK\Domain\Regular;
 use WayForPay\SDK\Domain\TransactionService;
 use WayForPay\SDK\Client\CurlRequestTransformer;
 use WayForPay\SDK\Contract\EndpointInterface;
@@ -135,7 +136,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     public function redirectToWayforpay(
         Donation $donation,
         array $serviceUrlParams = [],
-        array $extraWayforpayArgs = []
+        ?Regular $recurringPayment = null
     ): RedirectOffsite {
         $merchantAccount = WayforpaySettings::getMerchantAccount();
         $secretKey = WayforpaySettings::getSecretKey();
@@ -178,15 +179,15 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 ->setMerchantDomainName(wp_parse_url(home_url(), PHP_URL_HOST))
                 ->setClient($client)
                 ->setProducts(new ProductCollection([new Product($campaignTitle, $amount, 1)]))
-                ->setReturnUrl($returnUrl)
-                ->setServiceUrl($serviceUrl)
                 ->setLanguage(substr(get_bloginfo('language'), 0, 2))
                 ->setMerchantTransactionSecureType('AUTO'); // Default as per previous code
+            if ($recurringPayment) {
+                $wizard->setRegular($recurringPayment);
+            }
 
+            // Note: we do not use the standard Wayforpay SDK for sending the request. We want to control the redirect on the server side.
             $form = $wizard->getForm();
-            $wayforpayArgs = array_filter($form->getData()); // array_filter to exclude null values from URL params.
-            // Additional functionality (i.e. recurring payments) should be passed in as args by the caller.
-            $wayforpayArgs = array_merge($wayforpayArgs, $extraWayforpayArgs);
+            $wayforpayArgs = array_filter($form->getData()); // array_filter to exclude unset values from URL params.
 
             DonationNote::create([
                 'donationId' => $donation->id,
@@ -289,52 +290,56 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         // If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
         // If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
-        $gotSignature = $data['merchantSignature'] ?? null;
-        if (!empty($gotSignature)) {
+        if (!empty($data['merchantSignature'])) {
             try {
                 $handler = new ServiceUrlHandler($creds);
-                $handler->parseRequestFromArray($data);
+                $response = $handler->parseRequestFromArray($data);
             } catch (\Exception $e) {
                 throw new PaymentGatewayException('invalid signature received from Wayforpay: ' . $e->getMessage());
             }
+        } else {
+            try {
+                $response = new ServiceResponse($data);
+            } catch (\Exception $e) {
+                throw new PaymentGatewayException('invalid response data from Wayforpay: ' . $e->getMessage());
+            }
         }
 
-        $reasonCode = isset($data['reasonCode']) ? (int) $data['reasonCode'] : null;
-        switch ($reasonCode) {
-            case 1100: // OK
-                DonationNote::create([
-                    'donationId' => $donationId,
-                    'content' => sprintf(
-                        // TODO: remove the debug POST data after testing.
-                        'Payment successful: redirecting user to success page. Query params: %s, POST data: %s',
-                        print_r($queryParams, true),
-                        print_r($data, true)
-                    )
-                ]);
-                return new RedirectResponse(give_get_success_page_uri());
-            case 5103: // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
-                // Redirect to the Donor Dashboard page so users can at least see the status.
-                // TODO: consider adding a URL param to show the in progress state or a link back to the Wayforpay page.
-                // TODO: perhaps with a Hidden Field in the Donation, we can store the Wayforpay redirect URL and use it here.
-                DonationNote::create([
-                    'donationId' => $donationId,
-                    'content' => sprintf(
-                        'Payment still pending: redirecting user to history page. Query params: %s, POST data: %s',
-                        print_r($queryParams, true),
-                        print_r($data, true)
-                    )
-                ]);
-                return new RedirectResponse(give_get_history_page_uri());
-            default:
-                DonationNote::create([
-                    'donationId' => $donationId,
-                    'content' => sprintf(
-                        'Payment failed: redirecting user to failure page. Query params: %s, POST data: %s',
-                        print_r($queryParams, true),
-                        print_r($data, true)
-                    )
-                ]);
-                return new RedirectResponse(give_get_failed_transaction_uri());
+        $reason = $response->getReason();
+        if ($reason->isOK()) {
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    'Payment successful: redirecting user to success page. Query params: %s, POST data: %s',
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+            return new RedirectResponse(give_get_success_page_uri());
+        } elseif ($reason->getCode() === 5103) { // "Wait For Keep"
+            // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
+            // Redirect to the Donor Dashboard page so users can at least see the status.
+            // TODO: consider adding a URL param to show the in progress state or a link back to the Wayforpay page.
+            // TODO: perhaps with a Hidden Field in the Donation, we can store the Wayforpay redirect URL and use it here.
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    'Payment still pending: redirecting user to history page. Query params: %s, POST data: %s',
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+            return new RedirectResponse(give_get_history_page_uri());
+        } else {
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    'Payment failed: redirecting user to failure page. Query params: %s, POST data: %s',
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+            return new RedirectResponse(give_get_failed_transaction_uri());
         }
     }
 
@@ -529,12 +534,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         Subscription $subscription,
         $gatewayData
     ): RedirectOffsite {
-        $periodMap = [
-            'day' => 'daily',
-            'week' => 'weekly',
-            'month' => 'monthly',
-            'quarter' => 'quarterly',
-            'year' => 'yearly',
+        $periodMap = [ // GiveWP subscription periods => Wayforpay regular modes.
+            'day' => Regular::MODE_DAYLY,
+            'week' => Regular::MODE_WEEKLY,
+            'month' => Regular::MODE_MONTHLY,
+            'quarter' => Regular::MODE_QUARTERLY,
+            'year' => Regular::MODE_YEARLY,
         ];
         $period = $subscription->period->getValue();
         $regularMode = $periodMap[$period] ?? null;
@@ -543,22 +548,22 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         }
 
         $amount = $donation->amount->formatToDecimal();
-        $dateNext = $this->calculateNextDate($period, $subscription->frequency);
-        $recurringArgs = [
-            'regularMode' => $regularMode,
-            'regularAmount' => $amount,
-            'regularBehavior' => 'preset',
-            'regularOn' => 1,
-            'dateNext' => $dateNext,
-        ];
-        if ($subscription->installments > 0) {
-            $recurringArgs['regularCount'] = $subscription->installments - 1;
-        }
+        $dateNext = new \DateTime($this->calculateNextDate($period, $subscription->frequency));
+        $recurringPayment = new Regular(
+            modes: [$regularMode],
+            amount: $amount,
+            dateNext: $dateNext,
+            dateEnd: null,
+            count: $subscription->installments > 0 ? $subscription->installments - 1 : null,
+            on: true,
+            behavior: Regular::BEHAVIOR_PRESET
+        );
 
+        $serviceUrlParams = ['donation-id' => $donation->id, 'subscription-id' => $subscription->id];
         return $this->redirectToWayforpay(
             $donation,
-            ['donation-id' => $donation->id, 'subscription-id' => $subscription->id],
-            $recurringArgs
+            $serviceUrlParams,
+            $recurringPayment
         );
     }
 
