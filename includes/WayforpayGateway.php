@@ -18,6 +18,11 @@ use WayForPay\SDK\Collection\ProductCollection;
 use WayForPay\SDK\Credential\AccountSecretCredential;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
+use WayForPay\SDK\Client\CurlRequestTransformer;
+use WayForPay\SDK\Contract\EndpointInterface;
+use WayForPay\SDK\Contract\RequestInterface;
+use WayForPay\SDK\Endpoint\ApiRegularEndpoint;
+use WayForPay\SDK\Response\ServiceResponse;
 use WayForPay\SDK\Wizard\PurchaseWizard;
 use WayForPay\SDK\Wizard\RefundWizard;
 
@@ -245,7 +250,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 'content' => sprintf('Sending user to payment URL: %s', $wayforPayRedirect)
             ]);
             return new RedirectOffsite($wayforPayRedirect);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf('Payment failed: unknown error %s.', $e->getMessage())
@@ -477,7 +482,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 ->setComment('Refund initiated from GiveWP')
                 ->getRequest()
                 ->send();
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf('Refund failed: Could not connect to Wayforpay. Error: %s', $e->getMessage())
@@ -630,27 +635,62 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             return;
         }
 
-        $response = wp_remote_post(self::WAYFORPAY_RECURRING_API_URL, [
-            'timeout' => 30,
-            'headers' => ['Content-Type' => 'application/json; charset=utf-8'],
-            'body' => wp_json_encode([
-                'requestType' => 'REMOVE',
-                'merchantAccount' => $merchantAccount,
-                'merchantPassword' => $merchantPassword,
-                'orderReference' => $orderReference,
-            ]),
-        ]);
-        if (is_wp_error($response)) {
-            throw new PaymentGatewayException('failed to connect to Wayforpay');
+        // PHP SDK for Wayforpay doesn't have a REMOVE requestType for the regularApi; define a custom request for it.
+        $request = new class ($merchantAccount, $merchantPassword, $orderReference) implements RequestInterface {
+            private $account;
+            private $password;
+            private $orderReference;
+
+            public function __construct($account, $password, $orderReference)
+            {
+                $this->account = $account;
+                $this->password = $password;
+                $this->orderReference = $orderReference;
+            }
+
+            public function getTransactionData()
+            {
+                return [
+                    'requestType' => 'REMOVE',
+                    'merchantAccount' => $this->account,
+                    'merchantPassword' => $this->password,
+                    'orderReference' => $this->orderReference,
+                ];
+            }
+
+            public function getTransactionType()
+            {
+                return 'REMOVE';
+            }
+
+            public function getEndpoint()
+            {
+                return new ApiRegularEndpoint();
+            }
+
+            public function setEndpoint(EndpointInterface $endpoint)
+            {
+                return $this; // No-op.
+            }
+
+            public function getResponse(array $data)
+            {
+                return new ServiceResponse($data);
+            }
+        };
+
+        try {
+            $transformer = new CurlRequestTransformer();
+            /** @var ServiceResponse $response */
+            $response = $transformer->transform($request);
+        } catch (\Exception $e) {
+            throw new PaymentGatewayException('failed to connect to Wayforpay: ' . $e->getMessage());
         }
 
-        $data = json_decode(wp_remote_retrieve_body($response), true);
-        $reasonCode = $data['reasonCode'] ?? null;
-        // Reason code 1100 = OK (success)
-        // Reason code 1151 = Regular payment not found (already cancelled or doesn't exist)
-        if ($reasonCode !== 1100 && $reasonCode !== 1151) {
+        $reason = $response->getReason();
+        if (!$reason->isOK()) {
             throw new PaymentGatewayException(
-                sprintf('cancellation failed: %s (code: %s)', $data['reason'] ?? null, $reasonCode)
+                sprintf('cancellation failed: %s (code: %s)', $reason->getMessage(), $reason->getCode())
             );
         }
 
