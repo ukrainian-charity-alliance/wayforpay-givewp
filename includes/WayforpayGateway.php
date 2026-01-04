@@ -18,6 +18,7 @@ use WayForPay\SDK\Collection\ProductCollection;
 use WayForPay\SDK\Credential\AccountSecretCredential;
 use WayForPay\SDK\Domain\Client;
 use WayForPay\SDK\Domain\Product;
+use WayForPay\SDK\Domain\TransactionService;
 use WayForPay\SDK\Client\CurlRequestTransformer;
 use WayForPay\SDK\Contract\EndpointInterface;
 use WayForPay\SDK\Contract\RequestInterface;
@@ -304,6 +305,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donationId,
                     'content' => sprintf(
+                        // TODO: remove the debug POST data after testing.
                         'Payment successful: redirecting user to success page. Query params: %s, POST data: %s',
                         print_r($queryParams, true),
                         print_r($data, true)
@@ -337,43 +339,49 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     }
 
     /**
-     * Handles serviceUrl webhook calls from Wayforpay.
+     * Handles incoming serviceUrl webhook calls from Wayforpay.
      * Allows updating donation status even if user closes the browser on the Wayforpay site.
      * WayForPay will retry this endpoint periodically until it receives a valid acknowledgment.
      */
     public function webhookNotificationsListener(): void
     {
-        $queryParams = give_clean($_REQUEST);
-        // Wayforpay sends webhook data as JSON in the request body
-        $rawBody = file_get_contents('php://input');
-        $data = json_decode($rawBody, true);
-
+        $merchantAccount = WayforpaySettings::getMerchantAccount();
         $secretKey = WayforpaySettings::getSecretKey();
-        $orderReference = $data['orderReference'] ?? null;
+        if (empty($merchantAccount) || empty($secretKey)) {
+            throw new PaymentGatewayException('Wayforpay is not configured');
+        }
+        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
 
-        $sendAckResponse = function (string $status, int $httpCode) use ($orderReference, $secretKey) {
-            $time = time();
-            wp_send_json([
-                'orderReference' => $orderReference,
-                'status' => $status,
-                'time' => $time,
-                'signature' => $this->ackSignature([
-                    'orderReference' => $orderReference,
-                    'status' => $status,
-                    'time' => $time
-                ], $secretKey)
-            ], $httpCode);
+        $handler = new ServiceUrlHandler($creds);
+        try {
+            /** @var ServiceResponse $response */
+            $response = $handler->parseRequestFromPostRaw();
+        } catch (\Exception $e) {
+            error_log(sprintf('Wayforpay webhook error: %s', $e->getMessage()));
+            status_header(403);
+            exit('Error: Unable to process request');
+        }
+
+        $queryParams = give_clean($_GET);
+        $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
+        if (empty($donationId)) {
+            status_header(404);
+            exit('Donation ID missing');
+        }
+        $donation = Donation::find($donationId);
+        if (empty($donation)) {
+            status_header(404);
+            exit('Donation not found');
+        }
+
+        $transaction = $response->getTransaction();
+        $orderReference = $transaction->getOrderReference();
+        $status = $transaction->getStatus();
+        $sendAckResponse = function () use ($handler, $transaction) {
+            // send ack receipt to Wayforpay.
+            echo $handler->getSuccessResponse($transaction);
+            exit;
         };
-
-        if (empty($data)) {
-            $sendAckResponse('decline', 400);
-        }
-
-        $gotSignature = $data['merchantSignature'] ?? null;
-        $expectedSignature = $this->serviceUrlSignature($data, $secretKey);
-        if ($gotSignature !== $expectedSignature) {
-            $sendAckResponse('decline', 403);
-        }
 
         // Handle subscription renewal webhooks.
         // If subscription-id is present, it's a renewal webhook.
@@ -381,47 +389,29 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
             if (empty($subscription)) {
-                $sendAckResponse('decline', 404);
+                status_header(404);
+                exit('Subscription not found');
             }
-            $this->handleRenewal($data, $subscription);
-            $sendAckResponse('accept', 200);
+            $this->handleRenewal($transaction, $subscription);
+            $sendAckResponse();
         }
 
-        $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
-        if (empty($donationId)) {
-            $sendAckResponse('decline', 404);
-        }
-        $donation = Donation::find($donationId);
-        if (empty($donation)) {
-            $sendAckResponse('decline', 404);
-        }
-
-        $transactionStatus = $data['transactionStatus'] ?? null;
-        if ($transactionStatus === 'Approved') {
+        if ($transaction->isStatusApproved()) {
             if (!$donation->status->isComplete()) {
                 $donation->status = DonationStatus::COMPLETE();
-                $donation->gatewayTransactionId = $data['orderReference'];
+                $donation->gatewayTransactionId = $orderReference;
                 $donation->save();
-
-                if (!empty($subscriptionId)) {
-                    $subscription = Subscription::find($subscriptionId);
-                    if (!empty($subscription) && empty($subscription->gatewaySubscriptionId)) {
-                        $subscription->gatewaySubscriptionId = $data['orderReference'];
-                        $subscription->save();
-                    }
-                }
 
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        'Payment successful. Card: %s, Authorization Code: %s',
-                        $data['cardPan'] ?? null,
-                        $data['authCode'] ?? null
+                        'Payment successful. Card: %s, Auth Code: %s',
+                        $transaction->getCardPan(),
+                        $transaction->getAuthCode()
                     )
                 ]);
             }
-        } elseif ($transactionStatus === 'Declined' || $transactionStatus === 'Expired') {
-            // Only update if not already in a terminal state
+        } elseif ($transaction->isStatusDeclined() || $transaction->isStatusExpired()) {
             if (!$donation->status->isFailed()) {
                 $donation->status = DonationStatus::FAILED();
                 $donation->save();
@@ -429,21 +419,20 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        'Payment declined. Status: %s. Reason code: %s',
-                        $transactionStatus,
-                        $data['reasonCode'] ?? null
+                        'Payment failed. Status: %s. Reason: %s',
+                        $status,
+                        $response->getReason()->getMessage()
                     )
                 ]);
             }
         } else {
             DonationNote::create([
                 'donationId' => $donation->id,
-                'content' => sprintf('Wayforpay sent a status update: %s. Awaiting final confirmation.', $transactionStatus)
+                'content' => sprintf('Wayforpay sent a status update: %s.', $status)
             ]);
         }
 
-        // Accepting the response tells Wayforpay to stop sending transaction updates for this order.
-        $sendAckResponse('accept', 200);
+        $sendAckResponse();
     }
 
     /**
@@ -527,63 +516,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         ));
     }
 
-    /**
-     * HMAC-MD5 signature for making requests to the Wayforpay payment API.
-     * @see https://wiki.wayforpay.com/en/view/852102
-     */
-    // paymentSignature removed as it is now handled by Wayforpay SDK PurchaseWizard.
-
-
-    /**
-     * HMAC-MD5 signature for Wayforpay requests to serviceUrl.
-     * @see https://wiki.wayforpay.com/en/view/852102
-     */
-    private function serviceUrlSignature(array $args, string $secretKey): string
-    {
-        $signatureKeys = [
-            'merchantAccount',
-            'orderReference',
-            'amount',
-            'currency',
-            'authCode',
-            'cardPan',
-            'transactionStatus',
-            'reasonCode'
-        ];
-        return $this->createSignature($args, $signatureKeys, $secretKey);
-    }
-
-    /**
-     * HMAC-MD5 signature for acknowledgment responses to Wayforpay.
-     * @see https://wiki.wayforpay.com/en/view/852102
-     */
-    private function ackSignature(array $args, string $secretKey): string
-    {
-        $signatureKeys = [
-            'orderReference',
-            'status',
-            'time',
-        ];
-        return $this->createSignature($args, $signatureKeys, $secretKey);
-    }
-
-    private function createSignature(array $data, array $keys, string $secretKey): string
-    {
-        $hashFields = [];
-        foreach ($keys as $key) {
-            if (!array_key_exists($key, $data)) {
-                continue;
-            }
-            if (is_array($data[$key])) {
-                foreach ($data[$key] as $value) {
-                    $hashFields[] = $value;
-                }
-            } else {
-                $hashFields[] = $data[$key];
-            }
-        }
-        return hash_hmac('md5', implode(';', $hashFields), $secretKey);
-    }
 
     // ==================== Support for recurring payments ====================
 
@@ -708,12 +640,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $subscription->save();
     }
 
-    private function handleRenewal(array $data, Subscription $subscription): void
+    private function handleRenewal(TransactionService $transaction, Subscription $subscription): void
     {
-        $transactionStatus = $data['transactionStatus'] ?? null;
-        if ($transactionStatus === 'Approved') {
+        if ($transaction->isStatusApproved()) {
             $donation = $subscription->createRenewal([
-                'gatewayTransactionId' => $data['orderReference'] ?? null,
+                'gatewayTransactionId' => $transaction->getOrderReference(),
             ]);
             $donation->status = DonationStatus::COMPLETE();
             $donation->save();
@@ -724,17 +655,17 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 'donationId' => $donation->id,
                 'content' => sprintf(
                     'Recurring payment successful! Card: %s, Authorization Code: %s',
-                    $data['cardPan'] ?? null,
-                    $data['authCode'] ?? null
+                    $transaction->getCardPan(),
+                    $transaction->getAuthCode()
                 )
             ]);
-        } elseif ($transactionStatus === 'Declined' || $transactionStatus === 'Expired') {
+        } else {
             SubscriptionNote::create([
                 'subscriptionId' => $subscription->id,
                 'content' => sprintf(
-                    'Recurring payment failed. Status: %s, Reason: %s',
-                    $transactionStatus,
-                    $data['reasonCode'] ?? null
+                    'Recurring payment was not approved. Status: %s, Reason: %s',
+                    $transaction->getStatus(),
+                    $transaction->getReason()->getCode()
                 )
             ]);
         }
