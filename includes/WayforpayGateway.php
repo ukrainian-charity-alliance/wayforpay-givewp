@@ -168,6 +168,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             nameFirst: $donation->firstName,
             nameLast: $donation->lastName,
             email: $donation->email,
+            phone: $donation->phone,
+            country: $donation->billingAddress->country,
+            address: $donation->billingAddress->address1,
+            city: $donation->billingAddress->city,
+            state: $donation->billingAddress->state,
+            zip: $donation->billingAddress->zip
         );
 
         try {
@@ -179,6 +185,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 ->setMerchantDomainName(wp_parse_url(home_url(), PHP_URL_HOST))
                 ->setClient($client)
                 ->setProducts(new ProductCollection([new Product($campaignTitle, $amount, 1)]))
+                ->setReturnUrl($returnUrl)
+                ->setServiceUrl($serviceUrl)
                 ->setLanguage(substr(get_bloginfo('language'), 0, 2))
                 ->setMerchantTransactionSecureType('AUTO'); // Default as per previous code
             if ($recurringPayment) {
