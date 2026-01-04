@@ -22,6 +22,7 @@ use WayForPay\SDK\Client\CurlRequestTransformer;
 use WayForPay\SDK\Contract\EndpointInterface;
 use WayForPay\SDK\Contract\RequestInterface;
 use WayForPay\SDK\Endpoint\ApiRegularEndpoint;
+use WayForPay\SDK\Handler\ServiceUrlHandler;
 use WayForPay\SDK\Response\ServiceResponse;
 use WayForPay\SDK\Wizard\PurchaseWizard;
 use WayForPay\SDK\Wizard\RefundWizard;
@@ -265,6 +266,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
      */
     protected function handleReturnUrl(array $queryParams): RedirectResponse
     {
+        $merchantAccount = WayforpaySettings::getMerchantAccount();
+        $secretKey = WayforpaySettings::getSecretKey();
+        if (empty($merchantAccount) || empty($secretKey)) {
+            throw new PaymentGatewayException('Wayforpay is not configured');
+        }
+        $creds = new AccountSecretCredential($merchantAccount, $secretKey);
+
         // WayForPay may POST transaction data here, but we don't rely on it for status updates.
         // The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
         $data = stripslashes_deep($_POST);
@@ -282,9 +290,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         // If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
         $gotSignature = $data['merchantSignature'] ?? null;
         if (!empty($gotSignature)) {
-            $expectedSignature = $this->serviceUrlSignature($data, WayforpaySettings::getSecretKey());
-            if ($gotSignature !== $expectedSignature) {
-                throw new PaymentGatewayException('invalid signature received from Wayforpay.');
+            try {
+                $handler = new ServiceUrlHandler($creds);
+                $handler->parseRequestFromArray($data);
+            } catch (\Exception $e) {
+                throw new PaymentGatewayException('invalid signature received from Wayforpay: ' . $e->getMessage());
             }
         }
 
