@@ -6,6 +6,10 @@
 composer.lock
 wayforpay-givewp.zip
 
+# Testing
+tests/wp-tests-config.php
+.phpunit.result.cache
+
 # Wordpress - ignore core, configuration, examples, uploads and logs.
 # https://github.com/github/gitignore/blob/main/WordPress.gitignore
 
