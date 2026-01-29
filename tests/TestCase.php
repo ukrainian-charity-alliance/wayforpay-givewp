@@ -29,6 +29,11 @@ class TestCase extends WP_UnitTestCase
             $_SERVER['SERVER_NAME'] = 'localhost';
         }
         $_SERVER['SERVER_PROTOCOL'] = 'HTTP/1.1';
+
+        // Configure test Wayforpay credentials
+        give_update_option('wayforpay_test_merchant_account', self::TEST_MERCHANT_ACCOUNT);
+        give_update_option('wayforpay_test_secret_key', self::TEST_MERCHANT_SECRET);
+        give_update_option('wayforpay_test_merchant_password', 'test_password');
     }
 
     /**

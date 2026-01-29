@@ -262,6 +262,25 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             throw new PaymentGatewayException('no data received from Wayforpay');
         }
 
+        // If Wayforpay doesn't include a transactionStatus, the user likely cancelled on the payment page.
+        // Attempt redirect to the most relevant page on the original site: Campaign > Form > Homepage
+        if (empty($data['transactionStatus'])) {
+            $donation = Donation::find($donationId);
+            $pageId = $donation?->campaign()->get()?->page()?->id ?? $donation?->formId;
+            $redirectUrl = ($pageId ? get_permalink($pageId) : null) ?: home_url();
+
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    'User cancelled on Wayforpay. Redirecting to: %s. Query params: %s, POST data: %s',
+                    $redirectUrl,
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+            return new RedirectResponse($redirectUrl);
+        }
+
         // If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
         // If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
         if (!empty($data['merchantSignature'])) {
@@ -291,10 +310,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             ]);
             return new RedirectResponse(give_get_success_page_uri());
         } elseif ($reason->getCode() === 5103) { // "Wait For Keep"
+            // TODO: check if this is still relevant for clicking Cancel or if it's covered above.
             // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
             // Redirect to the Donor Dashboard page so users can at least see the status.
-            // TODO: consider adding a URL param to show the in progress state or a link back to the Wayforpay page.
-            // TODO: perhaps with a Hidden Field in the Donation, we can store the Wayforpay redirect URL and use it here.
             DonationNote::create([
                 'donationId' => $donationId,
                 'content' => sprintf(

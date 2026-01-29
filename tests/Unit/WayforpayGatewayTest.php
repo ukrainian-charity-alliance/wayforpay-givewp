@@ -4,6 +4,9 @@ namespace WayforpayGiveWP\Tests\Unit;
 
 use WayforpayGiveWP\Tests\TestCase;
 
+/**
+ * General tests for WayforpayGateway
+ */
 class WayforpayGatewayTest extends TestCase
 {
     private \WayforpayGateway $gateway;
@@ -48,14 +51,12 @@ class WayforpayGatewayTest extends TestCase
      */
     public function testCalculateNextDate(string $period, int $frequency): void
     {
-        // Use reflection to access protected method
         $reflection = new \ReflectionClass($this->gateway);
         $method = $reflection->getMethod('calculateNextDate');
         $method->setAccessible(true);
 
         $result = $method->invoke($this->gateway, $period, $frequency);
 
-        // Parse the result and verify it's a valid future date
         $date = new \DateTime($result);
         $now = new \DateTime();
 
@@ -75,3 +76,4 @@ class WayforpayGatewayTest extends TestCase
         ];
     }
 }
+
