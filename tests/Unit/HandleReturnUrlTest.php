@@ -155,7 +155,7 @@ class HandleReturnUrlTest extends TestCase
         $this->assertStringContainsString('Declined+by+card+issuer', $redirectUrl);
     }
 
-    public function testRedirectsToCampaignPageWhenUserCancelled(): void
+    public function testRedirectsToFailedPageWhenUserCancelled(): void
     {
         $campaign = Campaign::create([
             'type' => CampaignType::CORE(),
@@ -196,79 +196,9 @@ class HandleReturnUrlTest extends TestCase
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
 
-        // Verify redirect is to a page (contains page_id), not to home
         $redirectUrl = $response->getTargetUrl();
-        $this->assertNotEquals(home_url(), $redirectUrl, 'Should redirect to campaign page, not home');
-        $this->assertStringContainsString('page_id', $redirectUrl, 'Should redirect to a page');
-    }
-
-    public function testRedirectsToFormPageWhenNoCampaignPage(): void
-    {
-        $formPageId = wp_insert_post([
-            'post_title' => 'Donation Form',
-            'post_status' => 'publish',
-            'post_type' => 'give_forms',
-        ]);
-        $email = 'test' . uniqid() . '@example.com';
-        $donor = Donor::create([
-            'name' => 'Test Donor',
-            'firstName' => 'Test',
-            'lastName' => 'Donor',
-            'email' => $email,
-        ]);
-        $donation = Donation::create([
-            'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
-            'mode' => DonationMode::TEST(),
-            'type' => DonationType::SINGLE(),
-            'amount' => new Money(1000, 'USD'),
-            'donorId' => $donor->id,
-            'firstName' => 'Test',
-            'lastName' => 'Donor',
-            'email' => $email,
-            'formId' => $formPageId,
-            'formTitle' => 'Test Form',
-        ]);
-
-        $_POST = ['orderReference' => 'test'];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
-
-        $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
-
-        // Verify redirect is to a form page, not to home
-        $redirectUrl = $response->getTargetUrl();
-        $this->assertNotEquals(home_url(), $redirectUrl, 'Should redirect to form page, not home');
-        $this->assertStringContainsString('give_forms', $redirectUrl, 'Should redirect to a donation form');
-    }
-
-    public function testRedirectsToHomeWhenNoPagesExist(): void
-    {
-        $email = 'test' . uniqid() . '@example.com';
-        $donor = Donor::create([
-            'name' => 'Test Donor',
-            'firstName' => 'Test',
-            'lastName' => 'Donor',
-            'email' => $email,
-        ]);
-        $donation = Donation::create([
-            'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
-            'mode' => DonationMode::TEST(),
-            'type' => DonationType::SINGLE(),
-            'amount' => new Money(1000, 'USD'),
-            'donorId' => $donor->id,
-            'firstName' => 'Test',
-            'lastName' => 'Donor',
-            'email' => $email,
-            'formId' => 99999,
-            'formTitle' => 'Test Form',
-        ]);
-
-        $_POST = ['orderReference' => 'test'];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
-
-        $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
-        $this->assertEquals(home_url(), $response->getTargetUrl());
+        $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
+        $this->assertStringContainsString('gateway-error=Payment+cancelled', $redirectUrl);
     }
 
     /**

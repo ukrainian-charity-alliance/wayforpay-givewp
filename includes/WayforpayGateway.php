@@ -265,20 +265,17 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         // If Wayforpay doesn't include a transactionStatus, the user likely cancelled on the payment page.
         // Attempt redirect to the most relevant page on the original site: Campaign > Form > Homepage
         if (empty($data['transactionStatus'])) {
-            $donation = Donation::find($donationId);
-            $pageId = $donation?->campaign()->get()?->page()?->id ?? $donation?->formId;
-            $redirectUrl = ($pageId ? get_permalink($pageId) : null) ?: home_url();
-
             DonationNote::create([
                 'donationId' => $donationId,
                 'content' => sprintf(
-                    'User cancelled on Wayforpay. Redirecting to: %s. Query params: %s, POST data: %s',
-                    $redirectUrl,
+                    'User cancelled on Wayforpay. Redirecting to failure page. Query params: %s, POST data: %s',
                     print_r($queryParams, true),
                     print_r($data, true)
                 )
             ]);
-            return new RedirectResponse($redirectUrl);
+            return new RedirectResponse(give_get_failed_transaction_uri(
+                'gateway-error=' . urlencode(__('Payment cancelled', 'wayforpay-givewp'))
+            ));
         }
 
         // If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
@@ -309,19 +306,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 )
             ]);
             return new RedirectResponse(give_get_success_page_uri());
-        } elseif ($reason->getCode() === 5103) { // "Wait For Keep"
-            // TODO: check if this is still relevant for clicking Cancel or if it's covered above.
-            // "Wait For Keep" - User likely clicked Cancel in the Wayforpay payment page.
-            // Redirect to the Donor Dashboard page so users can at least see the status.
-            DonationNote::create([
-                'donationId' => $donationId,
-                'content' => sprintf(
-                    'Payment still pending: redirecting user to history page. Query params: %s, POST data: %s',
-                    print_r($queryParams, true),
-                    print_r($data, true)
-                )
-            ]);
-            return new RedirectResponse(give_get_history_page_uri());
         } else {
             DonationNote::create([
                 'donationId' => $donationId,
@@ -331,10 +315,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                     print_r($data, true)
                 )
             ]);
-            $failedUri = give_get_failed_transaction_uri(
+            return new RedirectResponse(give_get_failed_transaction_uri(
                 'gateway-error=' . urlencode($this->getDisplayErrorMessage($reason))
-            );
-            return new RedirectResponse($failedUri);
+            ));
         }
     }
 
