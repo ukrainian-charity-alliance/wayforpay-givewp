@@ -331,7 +331,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                     print_r($data, true)
                 )
             ]);
-            return new RedirectResponse(give_get_failed_transaction_uri());
+            $failedUri = give_get_failed_transaction_uri(
+                'gateway-error=' . urlencode($this->getDisplayErrorMessage($reason))
+            );
+            return new RedirectResponse($failedUri);
         }
     }
 
@@ -644,6 +647,30 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 )
             ]);
         }
+    }
+
+    /**
+     * User-friendly, translatable strings that can be shown in the frontend.
+     * @see https://wiki.wayforpay.com/en/view/852131
+     */
+    private function getDisplayErrorMessage(Reason $reason): string
+    {
+        return match ($reason->getCode()) {
+            Reason::CODE_DECLINED_TO_CARD_ISSUER => __('Declined by card issuer', 'wayforpay-givewp'),
+            Reason::CODE_BAD_CVV2 => __('Invalid CVV code', 'wayforpay-givewp'),
+            Reason::CODE_EXPIRED_CARD => __('Card expired', 'wayforpay-givewp'),
+            Reason::CODE_INSUFFICIENT_FUNDS => __('Insufficient funds', 'wayforpay-givewp'),
+            Reason::CODE_INVALID_CARD => __('Invalid card number', 'wayforpay-givewp'),
+            Reason::CODE_EXCEED_WITHDRAWAL_FREQUENCY => __('Withdrawal frequency exceeded', 'wayforpay-givewp'),
+            Reason::CODE_3DS_FAIL => __('3D Secure verification failed', 'wayforpay-givewp'),
+            Reason::CODE_INVALID_CURRENCY => __('Invalid currency', 'wayforpay-givewp'),
+            Reason::CODE_FRAUD => __('Transaction declined', 'wayforpay-givewp'),
+            Reason::CODE_GATE_DECLINED => __('Transaction declined', 'wayforpay-givewp'),
+            Reason::CODE_CARDHOLDER_SESSION_EXPIRED => __('Card payment session expired', 'wayforpay-givewp'),
+            Reason::CODE_RESTRICTED_CARD => __('Card is restricted', 'wayforpay-givewp'),
+            Reason::CODE_CARD_LIMITS_FAILED => __('Card limit exceeded', 'wayforpay-givewp'),
+            default => $reason->getMessage() ?: __('Payment declined', 'wayforpay-givewp'),
+        };
     }
 
     private function calculateNextDate(string $period, int $frequency): string

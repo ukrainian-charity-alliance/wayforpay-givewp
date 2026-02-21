@@ -149,7 +149,10 @@ class HandleReturnUrlTest extends TestCase
         $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
-        $this->assertEquals(give_get_failed_transaction_uri(), $response->getTargetUrl());
+        $redirectUrl = $response->getTargetUrl();
+        $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
+        $this->assertStringContainsString('gateway-error=', $redirectUrl);
+        $this->assertStringContainsString('Declined+by+card+issuer', $redirectUrl);
     }
 
     public function testRedirectsToCampaignPageWhenUserCancelled(): void
