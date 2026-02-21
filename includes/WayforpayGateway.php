@@ -351,20 +351,17 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             $response = $handler->parseRequestFromPostRaw();
         } catch (\Exception $e) {
             error_log(sprintf('Wayforpay webhook error: %s', $e->getMessage()));
-            status_header(403);
-            exit('Error: Unable to process request');
+            wp_die('Error: Unable to process request', '', ['response' => 403]);
         }
 
         $queryParams = give_clean($_GET);
         $donationId = isset($queryParams['donation-id']) ? (int) $queryParams['donation-id'] : null;
         if (empty($donationId)) {
-            status_header(404);
-            exit('Donation ID missing');
+            wp_die('Donation ID missing', '', ['response' => 404]);
         }
         $donation = Donation::find($donationId);
         if (empty($donation)) {
-            status_header(404);
-            exit('Donation not found');
+            wp_die('Donation not found', '', ['response' => 404]);
         }
 
         $transaction = $response->getTransaction();
@@ -373,7 +370,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $sendAckResponse = function () use ($handler, $transaction) {
             // send ack receipt to Wayforpay.
             echo $handler->getSuccessResponse($transaction);
-            exit;
+            wp_die('', '', ['response' => 200]);
         };
 
         // Handle subscription renewal webhooks.
@@ -382,8 +379,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
             if (empty($subscription)) {
-                status_header(404);
-                exit('Subscription not found');
+                wp_die('Subscription not found', '', ['response' => 404]);
             }
             // Only handle as renewal if it's not the initial payment (donation already complete).
             if ($donation->status->isComplete()) {
