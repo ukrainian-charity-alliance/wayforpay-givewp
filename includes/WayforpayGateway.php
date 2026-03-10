@@ -356,7 +356,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $sendAckResponse = function () use ($handler, $transaction) {
             // send ack receipt to Wayforpay.
             echo $handler->getSuccessResponse($transaction);
-            exit;
+            wp_die('', '', ['response' => 200]);
         };
 
         // Handle subscription renewal webhooks.
@@ -609,10 +609,24 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     private function handleRenewal(TransactionService $transaction, Subscription $subscription): void
     {
         if ($transaction->isStatusApproved()) {
-            $donation = $subscription->createRenewal([
-                'gatewayTransactionId' => $transaction->getOrderReference(),
-            ]);
+            $orderReference = $transaction->getOrderReference();
+            // Idempotency: skip if a donation with this GatewayTransactionId already exists.
+            $existingDonation = give()->donations->getByGatewayTransactionId($orderReference);
+            if ($existingDonation) {
+                SubscriptionNote::create([
+                    'subscriptionId' => $subscription->id,
+                    'content' => sprintf(
+                        'Skipped renewal attempt. Gateway Transaction ID: %s already linked to Donation #%d.',
+                        $orderReference,
+                        $existingDonation->id
+                    )
+                ]);
+                return;
+            }
 
+            $donation = $subscription->createRenewal([
+                'gatewayTransactionId' => $orderReference,
+            ]);
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(

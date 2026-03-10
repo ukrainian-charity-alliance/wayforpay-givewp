@@ -12,6 +12,10 @@ use Give\Donations\ValueObjects\DonationStatus;
 use Give\Donations\ValueObjects\DonationType;
 use Give\Donors\Models\Donor;
 use Give\Framework\Support\ValueObjects\Money;
+use Give\Subscriptions\Models\Subscription;
+use Give\Subscriptions\ValueObjects\SubscriptionMode;
+use Give\Subscriptions\ValueObjects\SubscriptionPeriod;
+use Give\Subscriptions\ValueObjects\SubscriptionStatus;
 use WayforpayGiveWP\Tests\TestCase;
 use WayForPay\SDK\Domain\Reason;
 use WayForPay\SDK\Helper\SignatureHelper;
@@ -201,6 +205,63 @@ class WebhookNotificationsListenerTest extends TestCase
         $this->callListenerWithInput($this->buildSignedPayload('Approved'));
     }
 
+    public function testRenewalIdempotency(): void
+    {
+        // 1. Create a completed initial donation with a subscription.
+        $donation = $this->createPendingDonation();
+        $subscription = $this->createSubscriptionForDonation($donation);
+
+        // Link the initial donation to the subscription and mark as complete.
+        $donation->type = DonationType::SUBSCRIPTION();
+        $donation->subscriptionId = $subscription->id;
+        $donation->status = DonationStatus::COMPLETE();
+        $donation->gatewayTransactionId = 'initial-order';
+        $donation->save();
+
+        // 2. Simulate a prior renewal by creating a donation with the same orderReference.
+        $existingOrderRef = 'renewal-order-123';
+        Donation::create([
+            'status' => DonationStatus::COMPLETE(),
+            'gatewayId' => 'wayforpay-gateway',
+            'mode' => DonationMode::TEST(),
+            'type' => DonationType::RENEWAL(),
+            'amount' => $donation->amount,
+            'donorId' => $donation->donorId,
+            'firstName' => $donation->firstName,
+            'lastName' => $donation->lastName,
+            'email' => $donation->email,
+            'campaignId' => $donation->campaignId,
+            'formId' => 1,
+            'formTitle' => 'Test Form',
+            'subscriptionId' => $subscription->id,
+            'gatewayTransactionId' => $existingOrderRef,
+        ]);
+
+        // Count donations before webhook call.
+        $donationCountBefore = $subscription->donations()->count();
+
+        $_GET = [
+            'donation-id' => (string) $donation->id,
+            'subscription-id' => (string) $subscription->id,
+        ];
+
+        // 3. Call the webhook with the SAME orderReference as the existing renewal.
+        $this->expectException(\WPDieException::class);
+        ob_start();
+        try {
+            $this->callListenerWithInput($this->buildSignedPayload('Approved', $existingOrderRef));
+        } catch (\WPDieException $e) {
+            ob_get_clean();
+
+            // 4. Assert no new donations were created.
+            $donationCountAfter = $subscription->donations()->count();
+            $this->assertEquals($donationCountBefore, $donationCountAfter, 'No duplicate renewal should be created');
+
+            throw $e;
+        }
+        ob_end_clean();
+    }
+
     private function extractJson(string $output): ?string
     {
         $start = strpos($output, '{');
@@ -311,6 +372,25 @@ class WebhookNotificationsListenerTest extends TestCase
             'campaignId' => $campaign->id,
             'formId' => 1,
             'formTitle' => 'Test Form',
+        ]);
+    }
+
+    /**
+     * Create a test subscription linked to an existing donation.
+     */
+    private function createSubscriptionForDonation(Donation $donation): Subscription
+    {
+        return Subscription::create([
+            'donationFormId' => $donation->formId,
+            'campaignId' => $donation->campaignId,
+            'period' => SubscriptionPeriod::MONTH(),
+            'frequency' => 1,
+            'donorId' => $donation->donorId,
+            'installments' => 0,
+            'amount' => $donation->amount,
+            'status' => SubscriptionStatus::ACTIVE(),
+            'mode' => SubscriptionMode::TEST(),
+            'gatewayId' => 'wayforpay-gateway',
         ]);
     }
 }

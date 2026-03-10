@@ -35,7 +35,7 @@
         }
     },
     "scripts": {
-        "test": "composer docker:up && ./vendor/bin/phpunit --colors && composer docker:down",
+        "test": "composer docker:up && ./vendor/bin/phpunit --colors; EXIT=$?; composer docker:down; exit $EXIT",
         "docker:up": "docker compose -f tests/docker-compose.yml up -d --wait",
         "docker:down": "docker compose -f tests/docker-compose.yml down",
         "zip": "composer install --no-dev --optimize-autoloader && zip -q -r wayforpay-givewp.zip . -x \".git/*\" \".vscode/*\" \".idea/*\" \"tests/*\" \"phpunit.xml\" \"phpcs.xml\" \"docker-compose.yml\" \".editorconfig\" \"*.zip\" && composer install",
