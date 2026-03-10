@@ -361,6 +361,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
         // Handle subscription renewal webhooks.
         // If subscription-id is present, it may be a renewal or the initial subscription payment.
+        $subscription = null;
         $subscriptionId = $queryParams['subscription-id'] ?? null;
         if (!empty($subscriptionId)) {
             $subscription = Subscription::find($subscriptionId);
@@ -382,12 +383,18 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 $donation->gatewayTransactionId = $orderReference;
                 $donation->save();
 
+                // If this payment is part of a Subscription, link the order reference to the subscription.
+                // This allows sending cancellation requests to Wayforpay from the GiveWP side.
+                if (!empty($subscription) && empty($subscription->gatewaySubscriptionId)) {
+                    $subscription->gatewaySubscriptionId = $orderReference;
+                    $subscription->save();
+                }
+
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        'Payment successful. Card: %s, Auth Code: %s',
-                        $transaction->getCardPan(),
-                        $transaction->getAuthCode()
+                        'Payment successful. Order reference: %s',
+                        $orderReference
                     )
                 ]);
             }
@@ -399,7 +406,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 DonationNote::create([
                     'donationId' => $donation->id,
                     'content' => sprintf(
-                        'Payment failed. Status: %s. Reason: %s',
+                        'Payment failed. Order reference: %s. Status: %s. Reason: %s',
+                        $orderReference,
                         $status,
                         $response->getReason()->getMessage()
                     )
@@ -492,11 +500,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     // ==================== Support for recurring payments ====================
 
+    #[\Override]
     public function supportsSubscriptions(): bool
     {
         return true;
     }
 
+    #[\Override]
     public function createSubscription(
         Donation $donation,
         Subscription $subscription,
@@ -539,15 +549,14 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         );
     }
 
+    #[\Override]
     public function cancelSubscription(Subscription $subscription): void
     {
-        $passwordCreds = WayforpaySettings::getPasswordCredentials();
-
         $orderReference = $subscription->gatewaySubscriptionId;
         if (empty($orderReference)) {
             SubscriptionNote::create([
                 'subscriptionId' => $subscription->id,
-                'content' => 'Subscription cancelled. No Gateway Subscription ID; no cancellation necessary with Wayforpay.'
+                'content' => 'Subscription cancelled. No order reference; no cancellation necessary with Wayforpay.'
             ]);
             $subscription->status = SubscriptionStatus::CANCELLED();
             $subscription->save();
@@ -559,10 +568,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             'content' => sprintf('Attempting to remove subscription %s in Wayforpay.', $orderReference)
         ]);
 
+        $passwordCreds = WayforpaySettings::getPasswordCredentials();
         $request = new RemoveSubscriptionRequest($passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference);
         try {
             $transformer = new CurlRequestTransformer();
-            /** @var ServiceResponse $response */
+            /** @var \WayForPay\SDK\Response\Response $response */
             $response = $transformer->transform($request);
         } catch (\Exception $e) {
             SubscriptionNote::create([
@@ -608,15 +618,15 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
     private function handleRenewal(TransactionService $transaction, Subscription $subscription): void
     {
+        $orderReference = $transaction->getOrderReference();
         if ($transaction->isStatusApproved()) {
-            $orderReference = $transaction->getOrderReference();
             // Idempotency: skip if a donation with this GatewayTransactionId already exists.
             $existingDonation = give()->donations->getByGatewayTransactionId($orderReference);
             if ($existingDonation) {
                 SubscriptionNote::create([
                     'subscriptionId' => $subscription->id,
                     'content' => sprintf(
-                        'Skipped renewal attempt. Gateway Transaction ID: %s already linked to Donation #%d.',
+                        'Skipped renewal attempt. Order reference: %s already linked to Donation #%d.',
                         $orderReference,
                         $existingDonation->id
                     )
@@ -630,16 +640,16 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             DonationNote::create([
                 'donationId' => $donation->id,
                 'content' => sprintf(
-                    'Recurring payment successful! Card: %s, Authorization Code: %s',
-                    $transaction->getCardPan(),
-                    $transaction->getAuthCode()
+                    'Recurring payment successful! Order reference: %s',
+                    $orderReference
                 )
             ]);
         } else {
             SubscriptionNote::create([
                 'subscriptionId' => $subscription->id,
                 'content' => sprintf(
-                    'Recurring payment was not approved. Status: %s, Reason: %s',
+                    'Recurring payment was not approved. Order reference: %s, Status: %s, Reason: %s',
+                    $orderReference,
                     $transaction->getStatus(),
                     $transaction->getReason()->getCode()
                 )
@@ -733,8 +743,8 @@ class RemoveSubscriptionRequest implements RequestInterface
     }
 
     #[\Override]
-    public function getResponse(array $data): ServiceResponse
+    public function getResponse(array $data): \WayForPay\SDK\Response\Response
     {
-        return new ServiceResponse($data);
+        return new \WayForPay\SDK\Response\Response($data);
     }
 }
