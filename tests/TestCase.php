@@ -11,17 +11,18 @@ use WP_UnitTestCase;
  */
 class TestCase extends WP_UnitTestCase
 {
-    /**
-     * Test merchant account for mocking.
-     */
     protected const TEST_MERCHANT_ACCOUNT = 'test_merchant';
     protected const TEST_MERCHANT_SECRET = 'test_secret';
 
-    /**
-     * Set up test environment before each test.
-     */
     public function setUp(): void
     {
+        // Ensure the uploads directory exists so WP_UnitTestCase::tearDown()
+        // doesn't fail with RecursiveDirectoryIterator on a fresh install.
+        $uploadsDir = dirname(__DIR__) . '/vendor/wordpress/wordpress/src/wp-content/uploads';
+        if (!is_dir($uploadsDir)) {
+            mkdir($uploadsDir, 0755, true);
+        }
+
         parent::setUp();
 
         // Set server variables for WordPress
@@ -36,9 +37,6 @@ class TestCase extends WP_UnitTestCase
         give_update_option('wayforpay_test_merchant_password', 'test_password');
     }
 
-    /**
-     * Clean up after each test.
-     */
     public function tearDown(): void
     {
         parent::tearDown();
