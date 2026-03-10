@@ -355,8 +355,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
         $status = $transaction->getStatus();
         $sendAckResponse = function () use ($handler, $transaction) {
             // send ack receipt to Wayforpay.
+            header('Content-Type: application/json; charset=utf-8');
             echo $handler->getSuccessResponse($transaction);
-            wp_die('', '', ['response' => 200]);
+            if (class_exists('\WPDieException')) { // For unit testing.
+                throw new \WPDieException('', 200);
+            }
+            exit;
         };
 
         // Handle subscription renewal webhooks.
@@ -372,7 +376,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             if ($donation->status->isComplete()) {
                 $this->handleRenewal($transaction, $subscription);
                 $sendAckResponse();
-                return;
             }
             // For initial subscription payments, fall through to update the donation status below.
         }
