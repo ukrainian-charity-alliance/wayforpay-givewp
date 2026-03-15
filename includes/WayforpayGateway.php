@@ -83,18 +83,20 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
     #[\Override]
     public function formSettings(int $formId): array
     {
-        // The form settings to send to the JS counterpart.
+        // The form settings to send to the JS counterpart. Used for Forms built using the Visual Form Builder.
         return [
-            'message' => __('You will be sent to the secure Wayforpay platform to complete your donation.', 'wayforpay-givewp'),
+            'message' => __('You will be redirected to Wayforpay, a secure payment platform where you can pay by credit card, Apple Pay, or Google Pay.', 'wayforpay-givewp'),
             'iconUrl' => WAYFORPAY_GIVEWP_PLUGIN_URL . 'assets/wayforpay-logo.svg',
         ];
     }
 
     public function getLegacyFormFieldMarkup(int $formId, array $args): string
     {
-        // For legacy forms, show a simple help text as a fallback.
+        // For consistency with the Visual Form Builder, display the same message and icon.
+        $settings = $this->formSettings($formId);
         return "<div class='wayforpay-gateway-help-text'>
-                    <p>" . esc_html__($this->formSettings($formId)['message'], 'wayforpay-givewp') . "</p>
+                    <img src='" . esc_url($settings['iconUrl']) . "' alt='Wayforpay' style='max-width: 160px; height: auto;' />
+                    <p>" . esc_html__($settings['message'], 'wayforpay-givewp') . "</p>
                 </div>";
     }
 
