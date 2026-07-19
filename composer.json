@@ -8,6 +8,9 @@
         "wayforpay/php-sdk": "^1.0"
     },
     "require-dev": {
+        "squizlabs/php_codesniffer": "^3.10",
+        "wp-coding-standards/wpcs": "^3.1",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
         "wpackagist-plugin/give": "^4.0",
         "php-stubs/wordpress-stubs": "^7.0",
         "phpunit/phpunit": "^9.0",
@@ -30,10 +33,13 @@
     ],
     "config": {
         "allow-plugins": {
-            "composer/installers": true
+            "composer/installers": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
         }
     },
     "scripts": {
+        "lint": "phpcs",
+        "lint:fix": "phpcbf",
         "release": "bash scripts/release.sh",
         "test": "composer docker:up && ./vendor/bin/phpunit --colors; EXIT=$?; composer docker:down; exit $EXIT",
         "docker:up": "docker compose -f tests/docker-compose.yml up -d --wait",
