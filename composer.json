@@ -2,7 +2,7 @@
     "name": "ukrainian-charity-alliance/wayforpay-givewp",
     "description": "Wayforpay payment gateway for GiveWP",
     "type": "wordpress-plugin",
-    "license": "GPL-2.0-or-later",
+    "license": "GPL-3.0-or-later",
     "require": {
         "php": ">=8.3",
         "wayforpay/php-sdk": "^1.0"
