@@ -2,6 +2,16 @@
 
 namespace WayforpayGiveWP\Tests;
 
+use Give\Campaigns\Models\Campaign;
+use Give\Campaigns\ValueObjects\CampaignGoalType;
+use Give\Campaigns\ValueObjects\CampaignStatus;
+use Give\Campaigns\ValueObjects\CampaignType;
+use Give\Donations\Models\Donation;
+use Give\Donations\ValueObjects\DonationMode;
+use Give\Donations\ValueObjects\DonationStatus;
+use Give\Donations\ValueObjects\DonationType;
+use Give\Donors\Models\Donor;
+use Give\Framework\Support\ValueObjects\Money;
 use WP_UnitTestCase;
 
 /**
@@ -50,5 +60,62 @@ class TestCase extends WP_UnitTestCase
     protected function createGateway(): \WayforpayGateway
     {
         return new \WayforpayGateway();
+    }
+
+    /**
+     * Create a test campaign with sensible defaults.
+     */
+    protected function createTestCampaign(): Campaign
+    {
+        return Campaign::create([
+            'type' => CampaignType::CORE(),
+            'title' => 'Test Campaign',
+            'shortDescription' => 'Test description',
+            'logo' => '',
+            'image' => '',
+            'primaryColor' => '#000000',
+            'secondaryColor' => '#ffffff',
+            'status' => CampaignStatus::ACTIVE(),
+            'goalType' => CampaignGoalType::AMOUNT(),
+            'goal' => 10000,
+        ]);
+    }
+
+    /**
+     * Create a test donor with a unique email.
+     */
+    protected function createTestDonor(): Donor
+    {
+        return Donor::create([
+            'name' => 'Test Donor',
+            'firstName' => 'Test',
+            'lastName' => 'Donor',
+            'email' => 'test' . uniqid() . '@example.com',
+        ]);
+    }
+
+    /**
+     * Create a test donation with all required dependencies. Any field can be
+     * overridden via $overrides (e.g. ['status' => DonationStatus::COMPLETE()]).
+     */
+    protected function createTestDonation(array $overrides = []): Donation
+    {
+        $campaign = $this->createTestCampaign();
+        $donor = $this->createTestDonor();
+
+        return Donation::create(array_merge([
+            'status' => DonationStatus::PENDING(),
+            'gatewayId' => 'wayforpay-gateway',
+            'mode' => DonationMode::TEST(),
+            'type' => DonationType::SINGLE(),
+            'amount' => new Money(1000, 'USD'),
+            'donorId' => $donor->id,
+            'firstName' => $donor->firstName,
+            'lastName' => $donor->lastName,
+            'email' => $donor->email,
+            'campaignId' => $campaign->id,
+            'formId' => 1,
+            'formTitle' => 'Test Form',
+        ], $overrides));
     }
 }
