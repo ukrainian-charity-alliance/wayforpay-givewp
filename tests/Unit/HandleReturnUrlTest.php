@@ -153,7 +153,7 @@ class HandleReturnUrlTest extends TestCase
         $redirectUrl = $response->getTargetUrl();
         $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
         $this->assertStringContainsString('gateway-error=', $redirectUrl);
-        $this->assertStringContainsString('Declined+by+card+issuer', $redirectUrl);
+        $this->assertStringContainsString('Declined%20by%20card%20issuer', $redirectUrl);
     }
 
     public function testPendingPaymentRedirectsToReceiptPageNotFailure(): void
@@ -266,7 +266,7 @@ class HandleReturnUrlTest extends TestCase
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $redirectUrl = $response->getTargetUrl();
         $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
-        $this->assertStringContainsString('gateway-error=Payment+cancelled', $redirectUrl);
+        $this->assertStringContainsString('gateway-error=Payment%20cancelled', $redirectUrl);
     }
 
     public function testRedirectsToFailedPageWhenUserCancelled(): void
@@ -312,7 +312,7 @@ class HandleReturnUrlTest extends TestCase
 
         $redirectUrl = $response->getTargetUrl();
         $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
-        $this->assertStringContainsString('gateway-error=Payment+cancelled', $redirectUrl);
+        $this->assertStringContainsString('gateway-error=Payment%20cancelled', $redirectUrl);
     }
 
     public function testSignedApprovedResponseRedirectsToSuccessPage(): void

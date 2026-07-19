@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Wayforpay Gateway Settings
  *
@@ -39,7 +38,7 @@ class WayforpaySettings {
 	/**
 	 * Add Wayforpay section to the gateways tab
 	 *
-	 * @param array $sections Existing gateway sections
+	 * @param array $sections Existing gateway sections.
 	 * @return array Modified sections array
 	 */
 	public static function addSection( array $sections ): array {
@@ -50,7 +49,7 @@ class WayforpaySettings {
 	/**
 	 * Add settings fields for the Wayforpay section
 	 *
-	 * @param array $settings Existing gateway settings
+	 * @param array $settings Existing gateway settings.
 	 * @return array Modified settings array
 	 */
 	public static function addSettings( array $settings ): array {

@@ -12,6 +12,8 @@
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wayforpay-givewp
  * Domain Path: /languages
+ *
+ * @package WayforpayGiveWP
  */
 
 // Prevent direct access
