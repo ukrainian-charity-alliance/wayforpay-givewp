@@ -6,11 +6,9 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: wayforpay_givewp_test
     ports:
-      - "3307:3306"
-    tmpfs:
-      - /var/lib/mysql
+      - "127.0.0.1:3307:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
