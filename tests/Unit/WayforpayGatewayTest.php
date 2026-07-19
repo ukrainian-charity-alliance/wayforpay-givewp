@@ -47,6 +47,16 @@ class WayforpayGatewayTest extends TestCase
         $this->assertTrue($this->gateway->supportsSubscriptions());
     }
 
+    public function testLegacyFormFieldMarkupContainsSettingsValues(): void
+    {
+        $settings = $this->gateway->formSettings(1);
+        $markup = $this->gateway->getLegacyFormFieldMarkup(1, []);
+
+        $this->assertStringContainsString($settings['iconUrl'], $markup);
+        $this->assertStringContainsString($settings['message'], $markup);
+        $this->assertStringContainsString('wayforpay-gateway-help-text', $markup);
+    }
+
     /**
      * @dataProvider nextDateProvider
      */

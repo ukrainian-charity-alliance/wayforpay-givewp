@@ -83,7 +83,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 	public function getLegacyFormFieldMarkup( int $formId, array $args ): string {
 		// For consistency with the Visual Form Builder, display the same message and icon.
-		// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+		$settings = $this->formSettings( $formId );
 		return "<div class='wayforpay-gateway-help-text'>
                     <img src='" . esc_url( $settings['iconUrl'] ) . "' alt='Wayforpay' style='max-width: 160px; height: auto;' />
                     <p>" . esc_html( $settings['message'] ) . '</p>
@@ -186,8 +186,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			);
 			$wayforpayResponse = wp_remote_post( $form->getEndpoint()->getUrl(), $wayforpayRequest );
 
-			$responseBody    = wp_remote_retrieve_body( $wayforpayResponse );
-			$responseHeaders = wp_remote_retrieve_headers( $wayforpayResponse );
 			if ( is_wp_error( $wayforpayResponse ) ) {
 				DonationNote::create(
 					array(
@@ -201,7 +199,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				throw new PaymentGatewayException( 'could not connect to Wayforpay' );
 			}
 
-			$httpCode      = wp_remote_retrieve_response_code( $wayforpayResponse );
+			$responseBody    = wp_remote_retrieve_body( $wayforpayResponse );
+			$responseHeaders = wp_remote_retrieve_headers( $wayforpayResponse );
+
+			$httpCode      = (int) wp_remote_retrieve_response_code( $wayforpayResponse );
 			$redirectCodes = array( 301, 302, 303, 307, 308 );
 			if ( ! in_array( $httpCode, $redirectCodes, true ) ) {
 				DonationNote::create(
