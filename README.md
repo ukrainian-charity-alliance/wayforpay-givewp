@@ -12,7 +12,7 @@
 The recommended way to install this plugin is by downloading the pre-built release from GitHub.
 
 **From a Release (Recommended):**
-1. Download the latest `wayforpay-givewp.zip` file from the [Releases page](https://github.com/radion/wayforpay-givewp/releases) on GitHub.
+1. Download the latest `wayforpay-givewp.zip` file from the [Releases page](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/releases) on GitHub.
 2. In your WordPress admin panel, go to **Plugins → Add New Plugin**.
 3. Click **Upload Plugin**, select the downloaded `.zip` file, and click **Install Now**.
 4. Activate the plugin.
