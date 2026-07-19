@@ -155,6 +155,119 @@ class HandleReturnUrlTest extends TestCase
         $this->assertStringContainsString('Declined+by+card+issuer', $redirectUrl);
     }
 
+    public function testPendingPaymentRedirectsToReceiptPageNotFailure(): void
+    {
+        // A card that isn't approved immediately bounces the donor back here while still processing.
+        // This is not a failure — the webhook is authoritative — so the donor should see the receipt page.
+        $campaign = Campaign::create([
+            'type' => CampaignType::CORE(),
+            'title' => 'Test Campaign',
+            'shortDescription' => 'Test description',
+            'logo' => '',
+            'image' => '',
+            'primaryColor' => '#000000',
+            'secondaryColor' => '#ffffff',
+            'status' => CampaignStatus::ACTIVE(),
+            'goalType' => CampaignGoalType::AMOUNT(),
+            'goal' => 10000,
+        ]);
+        $email = 'test' . uniqid() . '@example.com';
+        $donor = Donor::create([
+            'name' => 'Test Donor',
+            'firstName' => 'Test',
+            'lastName' => 'Donor',
+            'email' => $email,
+        ]);
+        $donation = Donation::create([
+            'status' => DonationStatus::PENDING(),
+            'gatewayId' => 'test-gateway',
+            'mode' => DonationMode::TEST(),
+            'type' => DonationType::SINGLE(),
+            'amount' => new Money(1000, 'USD'),
+            'donorId' => $donor->id,
+            'firstName' => 'Test',
+            'lastName' => 'Donor',
+            'email' => $email,
+            'campaignId' => $campaign->id,
+            'formId' => 1,
+            'formTitle' => 'Test Form',
+        ]);
+
+        $_POST = [
+            'orderReference' => 'test',
+            'transactionStatus' => 'Pending',
+            'reasonCode' => Reason::CODE_TRANSACTION_PENDING,
+            'reason' => 'Transaction pending',
+            'amount' => 1000,
+            'currency' => 'USD',
+            'createdDate' => time(),
+            'processingDate' => time(),
+        ];
+        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+
+        $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
+        $redirectUrl = $response->getTargetUrl();
+        $this->assertStringStartsWith(give_get_success_page_uri(), $redirectUrl);
+        // The receipt page can read this param to show a "payment is processing" notice.
+        $this->assertStringContainsString('gateway-status=pending', $redirectUrl);
+    }
+
+    public function testCancelledPaymentRedirectsToFailurePageEvenWhenStatusIsInFlight(): void
+    {
+        // A cancellation can come back with an in-flight status (e.g. Pending) but the cardholder-cancelled
+        // reason code. It must go to the failure page, not be mistaken for a still-processing payment.
+        $campaign = Campaign::create([
+            'type' => CampaignType::CORE(),
+            'title' => 'Test Campaign',
+            'shortDescription' => 'Test description',
+            'logo' => '',
+            'image' => '',
+            'primaryColor' => '#000000',
+            'secondaryColor' => '#ffffff',
+            'status' => CampaignStatus::ACTIVE(),
+            'goalType' => CampaignGoalType::AMOUNT(),
+            'goal' => 10000,
+        ]);
+        $email = 'test' . uniqid() . '@example.com';
+        $donor = Donor::create([
+            'name' => 'Test Donor',
+            'firstName' => 'Test',
+            'lastName' => 'Donor',
+            'email' => $email,
+        ]);
+        $donation = Donation::create([
+            'status' => DonationStatus::PENDING(),
+            'gatewayId' => 'test-gateway',
+            'mode' => DonationMode::TEST(),
+            'type' => DonationType::SINGLE(),
+            'amount' => new Money(1000, 'USD'),
+            'donorId' => $donor->id,
+            'firstName' => 'Test',
+            'lastName' => 'Donor',
+            'email' => $email,
+            'campaignId' => $campaign->id,
+            'formId' => 1,
+            'formTitle' => 'Test Form',
+        ]);
+
+        $_POST = [
+            'orderReference' => 'test',
+            'transactionStatus' => 'Pending',
+            'reasonCode' => Reason::CODE_CARDHOLDER_CANCELLED_REQUEST,
+            'reason' => 'Cardholder cancelled request',
+            'amount' => 1000,
+            'currency' => 'USD',
+            'createdDate' => time(),
+            'processingDate' => time(),
+        ];
+        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+
+        $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
+        $redirectUrl = $response->getTargetUrl();
+        $this->assertStringStartsWith(give_get_failed_transaction_uri(), $redirectUrl);
+        $this->assertStringContainsString('gateway-error=Payment+cancelled', $redirectUrl);
+    }
+
     public function testRedirectsToFailedPageWhenUserCancelled(): void
     {
         $campaign = Campaign::create([

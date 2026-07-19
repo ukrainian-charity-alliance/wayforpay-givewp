@@ -294,8 +294,25 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
             }
         }
 
+        // Decide which page to show, mirroring the webhook's status-based logic. Wayforpay may bounce the
+        // donor's browser back here while the transaction is still being authorized (Created / InProcessing /
+        // WaitingAuthComplete / Pending). Those are NOT failures — the card can still clear moments later, at
+        // which point the serviceUrl webhook marks the donation complete.
+        $transaction = $response->getTransaction();
         $reason = $response->getReason();
-        if ($reason->isOK()) {
+
+        // The donor explicitly cancelled on the Wayforpay page. This can arrive alongside an in-flight status,
+        // so it's checked separately and must NOT be treated as "still processing".
+        $cancelled = $reason->getCode() === Reason::CODE_CARDHOLDER_CANCELLED_REQUEST;
+
+        // Statuses that mean "still being authorized" — the only ones safe to send to the receipt page.
+        // Everything else (Declined, Expired, Voided, or anything unexpected) is treated as a failure.
+        $stillProcessing = $transaction->isStatusCreated()
+            || $transaction->isStatusInProcessing()
+            || $transaction->isStatusWaitAuthComplete()
+            || $transaction->isStatusPending();
+
+        if ($transaction->isStatusApproved()) {
             DonationNote::create([
                 'donationId' => $donationId,
                 'content' => sprintf(
@@ -305,17 +322,37 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
                 )
             ]);
             return new RedirectResponse(give_get_success_page_uri());
-        } else {
+        } elseif ($stillProcessing && !$cancelled) {
+            // Don't show a failure page — the webhook is the authoritative source of truth and will finalize
+            // the donation. Send the donor to the receipt page, which reflects the pending status.
+            // A `gateway-status=pending` query param (mirroring `gateway-error` on the failure page below)
+            // lets the receipt page differentiate this in-flight case (e.g. show a "your payment is being
+            // processed" notice) from a fully-confirmed payment.
             DonationNote::create([
                 'donationId' => $donationId,
                 'content' => sprintf(
-                    'Payment failed: redirecting user to failure page. Query params: %s, POST data: %s',
+                    'Payment pending at return (status: %s): redirecting user to receipt page; awaiting confirmation. Query params: %s, POST data: %s',
+                    $transaction->getStatus(),
+                    print_r($queryParams, true),
+                    print_r($data, true)
+                )
+            ]);
+            return new RedirectResponse(add_query_arg('gateway-status', 'pending', give_get_success_page_uri()));
+        } else {
+            $errorMessage = $cancelled
+                ? __('Payment cancelled', 'wayforpay-givewp')
+                : $this->getDisplayErrorMessage($reason);
+            DonationNote::create([
+                'donationId' => $donationId,
+                'content' => sprintf(
+                    'Payment %s: redirecting user to failure page. Query params: %s, POST data: %s',
+                    $cancelled ? 'cancelled' : 'failed',
                     print_r($queryParams, true),
                     print_r($data, true)
                 )
             ]);
             return new RedirectResponse(give_get_failed_transaction_uri(
-                'gateway-error=' . urlencode($this->getDisplayErrorMessage($reason))
+                'gateway-error=' . urlencode($errorMessage)
             ));
         }
     }
