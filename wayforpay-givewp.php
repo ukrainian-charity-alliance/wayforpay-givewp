@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Wayforpay Gateway for GiveWP
  * Description: An implementation of Wayforpay as a GiveWP payment gateway.
- * Version: 0.1.0
+ * Version: dev
  * Requires at least: 6.6
  * Requires PHP: 8.3
  * Requires Plugins: give
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin constants
-define('WAYFORPAY_GIVEWP_VERSION', '0.1.0');
+define('WAYFORPAY_GIVEWP_VERSION', 'dev');
 define('WAYFORPAY_GIVEWP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WAYFORPAY_GIVEWP_PLUGIN_URL', plugin_dir_url(__FILE__));
 

@@ -34,6 +34,7 @@
         }
     },
     "scripts": {
+        "release": "bash scripts/release.sh",
         "test": "composer docker:up && ./vendor/bin/phpunit --colors; EXIT=$?; composer docker:down; exit $EXIT",
         "docker:up": "docker compose -f tests/docker-compose.yml up -d --wait",
         "docker:down": "docker compose -f tests/docker-compose.yml down",
