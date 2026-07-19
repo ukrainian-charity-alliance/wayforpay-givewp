@@ -39,6 +39,7 @@ add_action('give_init', static function () {
  * Register Wayforpay payment gateway with GiveWP.
  */
 add_action('givewp_register_payment_gateway', static function ($paymentGatewayRegister) {
+    require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/RemoveSubscriptionRequest.php';
     require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/WayforpayGateway.php';
     $paymentGatewayRegister->registerGateway(WayforpayGateway::class);
 });
