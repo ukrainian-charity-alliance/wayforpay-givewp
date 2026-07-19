@@ -20,18 +20,23 @@ The plugin uses PHPUnit with the WordPress test suite. A Docker container provid
 
 ### Running Tests
 
+Use the Composer scripts defined in `composer.json`:
+
 ```bash
-# Start the test database
-composer test:up
-
-# Run tests
+# Run everything in one command:
+# brings the test database up, runs PHPUnit, then tears it back down
 composer test
-
-# Stop the test database
-composer test:down
 ```
 
+If you want to manage the test database manually:
+
 ```bash
-# Or run everything in one command
-composer test:ci
+# Start the test database
+composer docker:up
+
+# Run PHPUnit against the running database
+./vendor/bin/phpunit --colors
+
+# Stop the test database
+composer docker:down
 ```
