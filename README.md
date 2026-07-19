@@ -1,5 +1,10 @@
 # Wayforpay Gateway for GiveWP
 
+[![Requires PHP](https://img.shields.io/badge/PHP-8.3+-blue.svg)](https://php.net)
+[![Requires WordPress](https://img.shields.io/badge/WordPress-6.6+-blue.svg)](https://wordpress.org)
+[![Requires GiveWP](https://img.shields.io/badge/GiveWP-Required-green.svg)](https://wordpress.org/plugins/give/)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Wayforpay Payment Gateway integration for the [GiveWP](https://wordpress.org/plugins/give/) WordPress Plugin.
 
 ## Installation
