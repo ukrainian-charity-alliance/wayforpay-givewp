@@ -33,7 +33,7 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           sed -i "s/Version: .*/Version: ${VERSION}/" wayforpay-givewp.php
-          sed -i "s/define('WAYFORPAY_GIVEWP_VERSION', '.*');/define('WAYFORPAY_GIVEWP_VERSION', '${VERSION}');/" wayforpay-givewp.php
+          sed -i "s/define( 'WAYFORPAY_GIVEWP_VERSION', '.*' );/define( 'WAYFORPAY_GIVEWP_VERSION', '${VERSION}' );/" wayforpay-givewp.php
 
       - name: Build plugin zip
         run: composer zip
