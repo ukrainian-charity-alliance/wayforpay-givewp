@@ -55,6 +55,3 @@ No. Donors are redirected to Wayforpay's hosted page to pay.
 2. Donor details and donation summary, with the Wayforpay redirect notice before payment.
 
 == Changelog ==
-
-= 1.0.0 =
-* Initial release.

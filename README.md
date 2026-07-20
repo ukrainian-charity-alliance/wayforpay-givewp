@@ -60,6 +60,10 @@ composer docker:down
 
 This repository uses GitHub Actions to automatically build and attach the production `.zip` file whenever a new release tag is pushed.
 
+### Changelog
+
+Record user-facing changes under the `[Unreleased]` heading in [CHANGELOG.md](CHANGELOG.md) as you work, using the [Keep a Changelog](https://keepachangelog.com/) format. **Do not edit the changelog in `readme.txt` by hand** — the release tooling converts the changelog entries into WordPress readme.txt format and stamps the `Stable tag` automatically.
+
 Helper script to tag new releases and trigger the GitHub Actions release workflow:
 
 ```bash
@@ -69,9 +73,9 @@ composer release minor   # e.g., 1.0.0 -> 1.1.0
 composer release major   # e.g., 1.0.0 -> 2.0.0
 ```
 
-Once pushed, the GitHub Action will automatically intercept the tag, run the test suite, stamp the new version number into the plugin files, and attach `wayforpay-givewp.zip` to a new GitHub Release!
+The script moves the `[Unreleased]` entries into a dated `[VERSION]` section in `CHANGELOG.md`, commits that, then tags and pushes. Once pushed, the GitHub Action intercepts the tag, runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `wayforpay-givewp.zip` to a new GitHub Release.
 
-Alternatively, you can manually create a release and tag from the GitHub UI (**Releases** → **Draft a new release**).
+Alternatively, you can manually create a release and tag from the GitHub UI (**Releases** → **Draft a new release**). In that case the changelog sync reads whatever is under `[Unreleased]` in `CHANGELOG.md`, so make sure it is up to date before tagging.
 
 ## Support Ukrainian Charity Alliance
 

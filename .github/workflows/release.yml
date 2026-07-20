@@ -35,6 +35,10 @@ jobs:
           sed -i "s/Version: .*/Version: ${VERSION}/" wayforpay-givewp.php
           sed -i "s/define( 'WAYFORPAY_GIVEWP_VERSION', '.*' );/define( 'WAYFORPAY_GIVEWP_VERSION', '${VERSION}' );/" wayforpay-givewp.php
 
+      - name: Sync changelog into readme.txt
+        if: startsWith(github.ref, 'refs/tags/')
+        run: php scripts/changelog-to-readme.php "${GITHUB_REF_NAME#v}"
+
       - name: Build plugin zip
         run: composer zip
 

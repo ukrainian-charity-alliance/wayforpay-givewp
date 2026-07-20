@@ -55,10 +55,33 @@ echo "Current version: $LATEST_TAG"
 echo "New version:     $NEW_VERSION"
 echo ""
 
-read -p "Do you want to create and push the tag '$NEW_VERSION'? (y/n) " -n 1 -r
+# Warn if the changelog has no unreleased entries to ship.
+CHANGELOG="CHANGELOG.md"
+if [ -f "$CHANGELOG" ]; then
+    UNRELEASED=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' "$CHANGELOG" | grep -E '^\s*[-*]' || true)
+    if [ -z "$UNRELEASED" ]; then
+        echo "WARNING: CHANGELOG.md has no entries under [Unreleased]."
+        echo "         The release changelog will be empty. Add entries first, or continue anyway."
+        echo ""
+    fi
+fi
+
+read -p "Do you want to create and push the release '$NEW_VERSION'? (y/n) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+    # Roll [Unreleased] into a dated, versioned section and open a fresh [Unreleased].
+    if [ -f "$CHANGELOG" ]; then
+        TODAY=$(date +%Y-%m-%d)
+        perl -0pi -e "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW_VERSION] - $TODAY/" "$CHANGELOG"
+        git add "$CHANGELOG"
+        git commit -m "Release $NEW_VERSION"
+        echo "Pushing $BRANCH to origin..."
+        git push origin "$BRANCH"
+    fi
+
     echo "Creating tag $NEW_VERSION..."
     git tag "$NEW_VERSION"
     echo "Pushing tag to origin..."
