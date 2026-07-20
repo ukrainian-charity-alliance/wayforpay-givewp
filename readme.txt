@@ -3,7 +3,7 @@ Contributors: radion
 Donate link: https://uba.com.ua
 Tags: givewp, wayforpay, payment gateway, donations, ukraine
 Requires at least: 6.6
-Tested up to: 6.6
+Tested up to: 7.0
 Requires PHP: 8.3
 Stable tag: trunk
 License: GPLv3 or later

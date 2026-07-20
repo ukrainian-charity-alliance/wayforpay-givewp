@@ -44,7 +44,7 @@
         "test": "composer docker:up && ./vendor/bin/phpunit --colors; EXIT=$?; composer docker:down; exit $EXIT",
         "docker:up": "docker compose -f tests/docker-compose.yml up -d --wait",
         "docker:down": "docker compose -f tests/docker-compose.yml down",
-        "zip": "composer install --no-dev --optimize-autoloader && zip -q -r wayforpay-givewp.zip . -x \".git/*\" \".github/*\" \".claude/*\" \".vscode/*\" \".idea/*\" \"tests/*\" \"scripts/*\" \".wordpress-org/*\" \"composer.json\" \"composer.lock\" \"phpunit.xml\" \"phpcs.xml\" \".editorconfig\" \".gitignore\" \".phpunit.result.cache\" \"CLAUDE.md\" \"README.md\" \"CHANGELOG.md\" \"*.zip\" && composer install",
+        "zip": "composer install --no-dev --optimize-autoloader && zip -q -r wayforpay-givewp.zip . -x \".git/*\" \".github/*\" \".claude/*\" \".vscode/*\" \".idea/*\" \"tests/*\" \"scripts/*\" \".wordpress-org/*\" \"composer.json\" \"composer.lock\" \"phpunit.xml\" \"phpcs.xml\" \".editorconfig\" \".gitignore\" \".phpunit.result.cache\" \"CLAUDE.md\" \"AGENTS.md\" \"ARCHITECTURE.md\" \"README.md\" \"CHANGELOG.md\" \"CONTRIBUTING.md\" \"SECURITY.md\" \"*.zip\" && composer install",
         "post-install-cmd": [
             "@php -r \"file_exists('tests/wp-tests-config.php') || copy('tests/wp-tests-config.dist.php', 'tests/wp-tests-config.php');\""
         ]
