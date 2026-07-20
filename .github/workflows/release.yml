@@ -43,7 +43,7 @@ jobs:
         run: composer zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wayforpay-givewp
           path: wayforpay-givewp.zip
