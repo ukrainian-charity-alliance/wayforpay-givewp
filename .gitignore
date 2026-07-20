@@ -4,6 +4,10 @@
 # Claude Code (local, machine-specific settings)
 .claude/
 
+# Editor (local, machine-specific settings)
+.vscode/
+.idea/
+
 # Composer
 /vendor/
 wayforpay-givewp.zip
