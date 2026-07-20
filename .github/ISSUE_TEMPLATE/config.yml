@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ukrainian-charity-alliance/wayforpay-givewp/security/advisories/new
+    about: Please report security issues privately, not as public issues. See our Security Policy.
+  - name: GiveWP support
+    url: https://givewp.com/support/
+    about: For questions about GiveWP itself (not this gateway), contact GiveWP.

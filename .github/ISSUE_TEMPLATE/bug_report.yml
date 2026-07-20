@@ -1,0 +1,113 @@
+name: Bug report
+description: Report a problem with the Wayforpay gateway for GiveWP
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report!
+
+        ⚠️ **Do not report security vulnerabilities here.** Please follow our
+        [Security Policy](../security/policy) instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the problem is.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, step by step?
+      placeholder: |
+        1. Go to '...'
+        2. Donate '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: donation-notes
+    attributes:
+      label: Donation / subscription notes
+      description: >
+        The plugin logs every step to the donation's notes. If the issue relates
+        to a specific donation or subscription, please paste the relevant notes
+        (redact any personal or sensitive data first).
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      placeholder: e.g. 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: wordpress-version
+    attributes:
+      label: WordPress version
+      placeholder: e.g. 7.0
+    validations:
+      required: true
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: e.g. 8.3
+    validations:
+      required: true
+  - type: input
+    id: givewp-version
+    attributes:
+      label: GiveWP version
+      placeholder: e.g. 4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      description: Was GiveWP in live or test mode?
+      options:
+        - Live mode
+        - Test mode
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: donation-type
+    attributes:
+      label: Donation type
+      options:
+        - One-time donation
+        - Recurring donation (subscription)
+        - Refund
+        - Other / not applicable
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through the Security Policy).
+          required: true
