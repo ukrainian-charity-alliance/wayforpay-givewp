@@ -9,34 +9,50 @@ Stable tag: trunk
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-Wayforpay Payment Gateway integration for the GiveWP WordPress Plugin.
+Adds Wayforpay as an off-site payment gateway for GiveWP.
 
 == Description ==
 
-Adds [Wayforpay](https://wayforpay.com/) payment platform support for [GiveWP](https://wordpress.org/plugins/give/), allowing you to accept donations directly through the Wayforpay payment gateway.
+Registers [Wayforpay](https://wayforpay.com/) as a custom payment gateway for [GiveWP](https://wordpress.org/plugins/give/).
+Donors pay on Wayforpay's hosted payment page; the plugin does not handle card data on your site.
 
-### Features
-* Secure off-site checkout via Wayforpay.
-* Automatic status updates in GiveWP via Wayforpay webhooks.
-* Supports GiveWP Test Mode for safe integration testing.
+Payment status is set by a server-to-server webhook from Wayforpay, whose signature is verified before any donation is updated.
+
+### Supported
+
+* One-time donations.
+* Recurring donations (subscriptions), including renewals and cancellation.
+* Refunds from the GiveWP donation screen.
+* GiveWP Test Mode, with separate live and test credentials.
+
+### Requirements
+
+* WordPress 6.6 or later.
+* PHP 8.3 or later.
+* GiveWP.
+* A Wayforpay merchant account.
 
 == Installation ==
 
-1. Activate the plugin through the **Plugins** screen in WordPress.
-2. Ensure the core **GiveWP** plugin is also installed and activated.
-3. Navigate to **Donations > Settings > Payment Gateways** in your WordPress dashboard.
-4. Enable the Wayforpay gateway.
-5. Enter your Wayforpay Merchant Account and Secret Key credentials.
+1. Install and activate GiveWP.
+2. Install and activate this plugin.
+3. Go to **Donations > Settings > Payment Gateways** and enable Wayforpay.
+4. Enter your Wayforpay Merchant Account and Secret Key.
 
 == Frequently Asked Questions ==
 
 = Do I need a Wayforpay account? =
 
-Yes, you need an active Merchant Account with Wayforpay to accept live payments.
+Yes. A merchant account with Wayforpay is required to accept payments.
+
+= Are card details entered on my site? =
+
+No. Donors are redirected to Wayforpay's hosted page to pay.
 
 == Screenshots ==
 
-TODO
+1. Donation form: amount selection with an option to make the donation monthly.
+2. Donor details and donation summary, with the Wayforpay redirect notice before payment.
 
 == Changelog ==
 

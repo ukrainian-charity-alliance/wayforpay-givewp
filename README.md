@@ -7,6 +7,12 @@
 
 [Wayforpay](https://wayforpay.com/) Payment Gateway integration for the [GiveWP](https://wordpress.org/plugins/give/) WordPress Plugin.
 
+## Screenshots
+
+| Amount selection | Donor details & redirect |
+| --- | --- |
+| ![Donation form amount selection](.wordpress-org/screenshot-1.png) | ![Donor details with Wayforpay redirect notice](.wordpress-org/screenshot-2.png) |
+
 ## Installation
 
 The recommended way to install this plugin is by downloading the pre-built release from GitHub.
@@ -72,3 +78,7 @@ composer release major   # e.g., 1.0.0 -> 2.0.0
 Once pushed, the GitHub Action will automatically intercept the tag, run the test suite, stamp the new version number into the plugin files, and attach `wayforpay-givewp.zip` to a new GitHub Release!
 
 Alternatively, you can manually create a release and tag from the GitHub UI (**Releases** → **Draft a new release**).
+
+## Support Ukrainian Charity Alliance
+
+This plugin is built and maintained by [Ukrainian Charity Alliance](https://en.uba.com.ua/), a nonprofit dedicated to helping the people of Kharkiv. If you find it useful, please consider [supporting our work](https://en.uba.com.ua/support-us/).
