@@ -1,5 +1,7 @@
 # Wayforpay Gateway for GiveWP
 
+[![Tests](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/actions/workflows/test.yml/badge.svg)](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/actions/workflows/test.yml)
+[![Latest release](https://img.shields.io/github/v/release/ukrainian-charity-alliance/wayforpay-givewp)](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/releases)
 [![Requires PHP](https://img.shields.io/badge/PHP-8.3+-blue.svg)](https://php.net)
 [![Requires WordPress](https://img.shields.io/badge/WordPress-6.6+-blue.svg)](https://wordpress.org)
 [![Requires GiveWP](https://img.shields.io/badge/GiveWP-Required-green.svg)](https://wordpress.org/plugins/give/)
