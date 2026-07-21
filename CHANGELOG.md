@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-22
+
 ### Added
 
 - Wayforpay off-site payment gateway for GiveWP (hosted payment page; no card data handled on-site).
