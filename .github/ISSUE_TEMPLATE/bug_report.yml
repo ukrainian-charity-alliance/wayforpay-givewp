@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a problem with the Wayforpay gateway for GiveWP
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Don't report security vulnerabilities here** — use our
+        [Security Policy](../security/policy) instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What went wrong, what you expected, and steps to reproduce.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Plugin, WordPress, PHP, and GiveWP versions.
+      placeholder: e.g. plugin 1.0.0, WP 7.0, PHP 8.3, GiveWP 4.0
+    validations:
+      required: true
