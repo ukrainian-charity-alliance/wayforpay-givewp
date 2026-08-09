@@ -12,6 +12,9 @@
 /vendor/
 wayforpay-givewp.zip
 
+# Build output (scripts/build-dist.sh)
+/build/
+
 # Testing
 tests/wp-tests-config.php
 .phpunit.result.cache

@@ -58,6 +58,34 @@ composer docker:up
 composer docker:down
 ```
 
+## Plugin Check
+
+[Plugin Check](https://wordpress.org/plugins/plugin-check/) is the WordPress.org review tooling. It validates `readme.txt`, the plugin headers and the shipped code against the plugin directory guidelines, which is a different job from `composer lint` — PHPCS enforces the coding standards, Plugin Check enforces the directory guidelines.
+
+It runs against the **distributed** plugin rather than the working tree, so `tests/`, `scripts/` and dev dependencies are not reported. The plugin is built into `build/wayforpay-givewp/` from [.distignore](.distignore) — the same file list `composer zip` ships — and left there afterwards, so you can inspect exactly what was checked.
+
+### Prerequisites
+
+- Docker installed and running — Plugin Check is itself a WordPress plugin, so it needs a WordPress install to run in. The script keeps a throwaway one in Docker volumes; nothing is installed on the host.
+
+### Running Plugin Check
+
+```bash
+composer plugin-check
+```
+
+The first run pulls the Docker images and downloads WordPress and Plugin Check; later runs reuse them and take seconds. Any extra arguments are passed through to `wp plugin check`:
+
+```bash
+composer plugin-check -- --format=csv
+composer plugin-check -- --categories=security,plugin_repo
+composer plugin-check -- --clean          # discard the cached WordPress install
+```
+
+Only the static checks run locally — that is the WP-CLI default. The runtime checks additionally need the plugin activated against a working GiveWP install.
+
+One check is ignored by default: `trunk_stable_tag`, because `Stable tag: trunk` is the placeholder this repository commits and the release tooling stamps the real version into `readme.txt`. A genuine disagreement between the plugin header and `readme.txt` reports as `stable_tag_mismatch`, which is not ignored.
+
 ## Releasing
 
 This repository uses GitHub Actions to automatically build and attach the production `.zip` file whenever a new release tag is pushed.

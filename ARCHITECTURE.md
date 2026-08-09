@@ -125,8 +125,18 @@ One architectural detail worth knowing: `webhookNotificationsListener` throws
 `\WPDieException` (instead of calling `exit`) when that class exists, so the signed
 acknowledgment path can be asserted in tests.
 
+`composer plugin-check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
+the WordPress.org review tooling, against the built plugin tree inside a throwaway
+Dockerised WordPress. It complements `composer lint` rather than duplicating it:
+PHPCS enforces the coding standards, Plugin Check enforces the plugin directory
+guidelines (readme.txt, plugin headers, trademarks, global namespace hygiene).
+
 ## Building a release
 
 `composer zip` installs prod-only dependencies, produces `wayforpay-givewp.zip`
-(excluding dev/test/tooling files), then restores dev dependencies. See the
-[README](README.md) for the full release process.
+(excluding dev/test/tooling files), then restores dev dependencies. What ships is
+defined by [.distignore](.distignore), which is also what `composer plugin-check`
+builds from — one exclusion list, so the checked plugin and the shipped plugin
+cannot drift apart.
+
+See the [README](README.md) for the full release process.

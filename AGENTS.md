@@ -18,3 +18,6 @@ When making changes:
 - Record user-facing changes under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md). Do not hand-edit the changelog in `readme.txt`.
 - Before finishing, run `composer lint` and `composer test`.
+- When you change `readme.txt`, the plugin headers, or what the plugin ships
+  (see [.distignore](.distignore)), also run `composer plugin-check` — it runs
+  the WordPress.org review tooling against the built plugin. Requires Docker.

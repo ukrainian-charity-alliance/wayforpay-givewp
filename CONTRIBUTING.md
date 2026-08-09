@@ -35,6 +35,16 @@ composer lint:fix   # auto-fix what can be fixed
 CI runs the linter and the full test suite on every pull request; both must pass
 before a change can be merged.
 
+The plugin is also validated with
+[Plugin Check](https://wordpress.org/plugins/plugin-check/), the WordPress.org
+review tooling, which covers the plugin directory guidelines rather than the
+coding standards — `readme.txt`, the plugin headers, and the code as shipped.
+Please run it when you touch any of those:
+
+```bash
+composer plugin-check   # requires Docker; see the README
+```
+
 A few repository conventions to preserve:
 
 - **Donation notes are the log.** Every notable step and every failure branch

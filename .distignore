@@ -1,0 +1,28 @@
+# Files and directories that are not part of the distributed plugin.
+# Single source of truth for `composer zip` and `composer dist` (scripts/build-dist.sh).
+# Patterns are zip(1) exclude patterns, relative to the repository root.
+.git/*
+.github/*
+.claude/*
+.vscode/*
+.idea/*
+tests/*
+scripts/*
+.wordpress-org/*
+build/*
+composer.json
+composer.lock
+phpunit.xml
+phpcs.xml
+.distignore
+.editorconfig
+.gitignore
+.phpunit.result.cache
+CLAUDE.md
+AGENTS.md
+ARCHITECTURE.md
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+*.zip
