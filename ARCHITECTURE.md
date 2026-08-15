@@ -136,6 +136,13 @@ Dockerised WordPress. It complements `composer lint` rather than duplicating it:
 PHPCS enforces the coding standards, Plugin Check enforces the plugin directory
 guidelines (readme.txt, plugin headers, trademarks, global namespace hygiene).
 
+The report is expected to be empty. `wp plugin check` itself exits 0 even when it
+reports problems, so [scripts/plugin-check.sh](scripts/plugin-check.sh) derives
+the exit status from whether anything was reported and fails on any finding —
+that is what lets it gate CI. Known false positives are listed
+in `IGNORED_CODES` at the top of the script, each with a comment explaining why it
+is safe to ignore.
+
 ## Building a release
 
 `composer zip` installs prod-only dependencies, produces `wayforpay-givewp.zip`

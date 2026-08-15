@@ -34,10 +34,13 @@ DIST_DIR="$BUILD_DIR/$SLUG"
 PREFIX="$SLUG-pcp"
 NETWORK="$PREFIX-net"
 DB_CONTAINER="$PREFIX-db"
-DB_VOLUME="$PREFIX-db-data"
+# The engine is in the volume name because a data directory written by one server
+# is not readable by the other.
+DB_VOLUME="$PREFIX-db-data-mariadb"
 WP_VOLUME="$PREFIX-wp"
 
-DB_IMAGE="mysql:8.0"
+# MariaDB rather than MySQL for size: ~103 MB to pull against ~223 MB.
+DB_IMAGE="mariadb:lts"
 WP_IMAGE="wordpress:cli"
 
 # `Stable tag: trunk` is the placeholder this repository commits; the release
@@ -119,7 +122,7 @@ docker run -d --name "$DB_CONTAINER" --network "$NETWORK" \
 printf 'Waiting for the database'
 DB_READY=""
 for _ in $(seq 1 60); do
-    if docker exec "$DB_CONTAINER" mysqladmin ping -uroot -proot --silent >/dev/null 2>&1; then
+    if docker exec "$DB_CONTAINER" mariadb-admin ping -uroot -proot --silent >/dev/null 2>&1; then
         DB_READY=1
         break
     fi
@@ -131,6 +134,8 @@ if [ -z "$DB_READY" ]; then
     echo "Error: the database did not become ready in time." >&2
     exit 1
 fi
+
+REPORT="$BUILD_DIR/plugin-check.log"
 
 docker run --rm --network "$NETWORK" --user root \
     -v "$WP_VOLUME:/var/www/html" \
@@ -165,4 +170,16 @@ docker run --rm --network "$NETWORK" --user root \
         echo "WordPress $($WP core version), Plugin Check $($WP plugin get plugin-check --field=version)"
         echo
         exec $WP plugin check "$PLUGIN_SLUG" --ignore-codes="$IGNORED_CODES" "$@"
-    ' sh "$@"
+    ' sh "$@" | tee "$REPORT"
+
+# `wp plugin check` exits 0 even when it reports findings, so the gate is derived
+# here. Findings are printed grouped under a "FILE: <path>" heading, and a file
+# only gets one when it has at least one finding. The `strict-*` formats skip that
+# grouping, so passing one would turn the gate off.
+if grep -q '^FILE: ' "$REPORT"; then
+    echo
+    echo "Error: Plugin Check reported the findings above." >&2
+    exit 1
+fi
+
+echo "Plugin Check found no issues."

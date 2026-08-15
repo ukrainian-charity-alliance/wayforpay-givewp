@@ -45,3 +45,6 @@ jobs:
 
       - name: Run tests
         run: composer test
+
+      - name: Run Plugin Check
+        run: composer plugin-check

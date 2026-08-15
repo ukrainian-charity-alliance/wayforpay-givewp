@@ -39,11 +39,17 @@ The plugin is also validated with
 [Plugin Check](https://wordpress.org/plugins/plugin-check/), the WordPress.org
 review tooling, which covers the plugin directory guidelines rather than the
 coding standards — `readme.txt`, the plugin headers, and the code as shipped.
-Please run it when you touch any of those:
+This runs in CI too, alongside the linter and the test suite, and reports nothing
+today — so anything it reports on your branch is something you introduced. Run it
+locally when you touch any of the above:
 
 ```bash
 composer plugin-check   # requires Docker; see the README
 ```
+
+If a finding is a false positive, add its code to `IGNORED_CODES` at the top of
+[scripts/plugin-check.sh](scripts/plugin-check.sh) with a comment explaining why,
+rather than widening the ignore list silently.
 
 A few repository conventions to preserve:
 
