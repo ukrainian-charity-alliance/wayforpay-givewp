@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-15
+
 ### Added
 
 - "External services" section in `readme.txt` documenting what donor data is
