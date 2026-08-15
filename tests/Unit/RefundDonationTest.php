@@ -10,7 +10,7 @@ use WayforpayGiveWP\Tests\TestCase;
  */
 class RefundDonationTest extends TestCase
 {
-    private \WayforpayGateway $gateway;
+    private \WayforpayGiveWP\WayforpayGateway $gateway;
 
     public function setUp(): void
     {

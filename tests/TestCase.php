@@ -55,11 +55,11 @@ class TestCase extends WP_UnitTestCase
     /**
      * Helper to get a mock gateway instance with test credentials.
      *
-     * @return \WayforpayGateway
+     * @return \WayforpayGiveWP\WayforpayGateway
      */
-    protected function createGateway(): \WayforpayGateway
+    protected function createGateway(): \WayforpayGiveWP\WayforpayGateway
     {
-        return new \WayforpayGateway();
+        return new \WayforpayGiveWP\WayforpayGateway();
     }
 
     /**

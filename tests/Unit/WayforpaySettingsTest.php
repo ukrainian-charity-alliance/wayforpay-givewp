@@ -21,7 +21,7 @@ class WayforpaySettingsTest extends TestCase
 
     public function testGetCredentialsReturnsConfiguredTestCredentials(): void
     {
-        $creds = \WayforpaySettings::getCredentials();
+        $creds = \WayforpayGiveWP\WayforpaySettings::getCredentials();
 
         $this->assertInstanceOf(AccountSecretCredential::class, $creds);
         $this->assertEquals(self::TEST_MERCHANT_ACCOUNT, $creds->getAccount());
@@ -36,12 +36,12 @@ class WayforpaySettingsTest extends TestCase
         $this->expectException(PaymentGatewayException::class);
         $this->expectExceptionMessage('Wayforpay is not configured');
 
-        \WayforpaySettings::getCredentials();
+        \WayforpayGiveWP\WayforpaySettings::getCredentials();
     }
 
     public function testGetPasswordCredentialsReturnsConfiguredTestCredentials(): void
     {
-        $creds = \WayforpaySettings::getPasswordCredentials();
+        $creds = \WayforpayGiveWP\WayforpaySettings::getPasswordCredentials();
 
         $this->assertInstanceOf(AccountPasswordCredential::class, $creds);
         $this->assertEquals(self::TEST_MERCHANT_ACCOUNT, $creds->getAccount());
@@ -54,6 +54,6 @@ class WayforpaySettingsTest extends TestCase
         $this->expectException(PaymentGatewayException::class);
         $this->expectExceptionMessage('Wayforpay is not configured');
 
-        \WayforpaySettings::getPasswordCredentials();
+        \WayforpayGiveWP\WayforpaySettings::getPasswordCredentials();
     }
 }

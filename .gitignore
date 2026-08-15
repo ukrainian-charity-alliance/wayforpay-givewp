@@ -12,7 +12,7 @@
 /vendor/
 wayforpay-givewp.zip
 
-# Build output (scripts/build-dist.sh)
+# Build output (scripts/plugin-check.sh)
 /build/
 
 # Testing

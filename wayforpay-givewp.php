@@ -11,7 +11,6 @@
  * License: GPL-3.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wayforpay-givewp
- * Domain Path: /languages
  *
  * @package WayforpayGiveWP
  */
@@ -20,6 +19,9 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use WayforpayGiveWP\WayforpayGateway;
+use WayforpayGiveWP\WayforpaySettings;
 
 // Plugin constants
 define( 'WAYFORPAY_GIVEWP_VERSION', 'dev' );
@@ -48,7 +50,7 @@ add_action(
 add_action(
 	'givewp_register_payment_gateway',
 	static function ( $paymentGatewayRegister ) {
-		require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/RemoveSubscriptionRequest.php';
+		require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/WayforpayRemoveSubscriptionRequest.php';
 		require_once WAYFORPAY_GIVEWP_PLUGIN_DIR . 'includes/WayforpayGateway.php';
 		$paymentGatewayRegister->registerGateway( WayforpayGateway::class );
 	}

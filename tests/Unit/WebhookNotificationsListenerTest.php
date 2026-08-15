@@ -25,7 +25,7 @@ use WayForPay\SDK\Helper\SignatureHelper;
  */
 class WebhookNotificationsListenerTest extends TestCase
 {
-    private \WayforpayGateway $gateway;
+    private \WayforpayGiveWP\WayforpayGateway $gateway;
 
     public function setUp(): void
     {

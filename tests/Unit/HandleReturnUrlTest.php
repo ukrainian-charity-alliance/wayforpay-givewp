@@ -21,7 +21,7 @@ use WayForPay\SDK\Helper\SignatureHelper;
  */
 class HandleReturnUrlTest extends TestCase
 {
-    private \WayforpayGateway $gateway;
+    private \WayforpayGiveWP\WayforpayGateway $gateway;
 
     public function setUp(): void
     {

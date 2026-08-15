@@ -8,6 +8,8 @@
  * @package WayforpayGiveWP
  */
 
+namespace WayforpayGiveWP;
+
 // Prevent direct access
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

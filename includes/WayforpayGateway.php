@@ -1,5 +1,7 @@
 <?php
 
+namespace WayforpayGiveWP;
+
 use Give\Donations\Models\Donation;
 use Give\Donations\Models\DonationNote;
 use Give\Donations\ValueObjects\DonationStatus;
@@ -653,7 +655,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		);
 
 		$passwordCreds = WayforpaySettings::getPasswordCredentials();
-		$request       = new RemoveSubscriptionRequest( $passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference );
+		$request       = new WayforpayRemoveSubscriptionRequest( $passwordCreds->getAccount(), $passwordCreds->getPassword(), $orderReference );
 		try {
 			$transformer = new CurlRequestTransformer();
 			/** @var \WayForPay\SDK\Response\Response $response */

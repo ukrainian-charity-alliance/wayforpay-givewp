@@ -13,7 +13,7 @@ use WayforpayGiveWP\Tests\TestCase;
  */
 class CancelSubscriptionTest extends TestCase
 {
-    private \WayforpayGateway $gateway;
+    private \WayforpayGiveWP\WayforpayGateway $gateway;
 
     public function setUp(): void
     {

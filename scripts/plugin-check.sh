@@ -44,7 +44,15 @@ WP_IMAGE="wordpress:cli"
 # tooling stamps the real version into readme.txt (scripts/changelog-to-readme.php),
 # so the code only ever fires here. A genuine header/readme disagreement is
 # reported as stable_tag_mismatch, which is deliberately not ignored.
-IGNORED_CODES="trunk_stable_tag"
+#
+# `trademarked_term` fires on the restricted term "wp", which Plugin Check finds
+# by plain substring match inside "GiveWP". Its own term list annotates that
+# entry `'wp', // it's allowed, but shows a warning.`, and the rules that would
+# genuinely apply — the begins-with restrictions on "givewp-" and "wp-" — are not
+# triggered by the slug "wayforpay-givewp". Unlike most codes this one reads only
+# the plugin name and slug, and the slug cannot change once wordpress.org has
+# approved it, so nothing new can hide behind this.
+IGNORED_CODES="trunk_stable_tag,trademarked_term"
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "Error: Docker is required to run Plugin Check." >&2

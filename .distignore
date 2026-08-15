@@ -1,5 +1,6 @@
 # Files and directories that are not part of the distributed plugin.
-# Single source of truth for `composer zip` and `composer dist` (scripts/build-dist.sh).
+# Single source of truth for `composer zip` and `composer plugin-check`
+# (scripts/plugin-check.sh).
 # Patterns are zip(1) exclude patterns, relative to the repository root.
 .git/*
 .github/*
@@ -10,7 +11,6 @@ tests/*
 scripts/*
 .wordpress-org/*
 build/*
-composer.json
 composer.lock
 phpunit.xml
 phpcs.xml

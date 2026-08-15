@@ -10,7 +10,7 @@ use WayForPay\SDK\Domain\Reason;
  */
 class WayforpayGatewayTest extends TestCase
 {
-    private \WayforpayGateway $gateway;
+    private \WayforpayGiveWP\WayforpayGateway $gateway;
 
     public function setUp(): void
     {
@@ -25,7 +25,7 @@ class WayforpayGatewayTest extends TestCase
 
     public function testStaticId(): void
     {
-        $this->assertEquals('wayforpay-gateway', \WayforpayGateway::id());
+        $this->assertEquals('wayforpay-gateway', \WayforpayGiveWP\WayforpayGateway::id());
     }
 
     public function testGatewayName(): void

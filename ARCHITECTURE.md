@@ -21,7 +21,8 @@ payment page.
 | Path | Role |
 | --- | --- |
 | [wayforpay-givewp.php](wayforpay-givewp.php) | Plugin bootstrap. Defines constants, loads the autoloader, hooks into GiveWP to register settings (`give_init`) and the gateway (`givewp_register_payment_gateway`). |
-| [includes/WayforpayGateway.php](includes/WayforpayGateway.php) | The gateway. Extends GiveWP's `PaymentGateway`; implements `WebhookNotificationsListener` and `PaymentGatewayRefundable`. Also holds the small `RemoveSubscriptionRequest` SDK request class at the bottom. |
+| [includes/WayforpayGateway.php](includes/WayforpayGateway.php) | The gateway. Extends GiveWP's `PaymentGateway`; implements `WebhookNotificationsListener` and `PaymentGatewayRefundable`. |
+| [includes/WayforpayRemoveSubscriptionRequest.php](includes/WayforpayRemoveSubscriptionRequest.php) | Small SDK request class for subscription removal, which the Wayforpay SDK does not provide. |
 | [includes/WayforpaySettings.php](includes/WayforpaySettings.php) | Admin settings under *Give → Settings → Payment Gateways → Wayforpay*. Registers fields and exposes credential accessors that switch between live/test based on GiveWP test mode. |
 | [js/fe.js](js/fe.js) | Frontend field component for GiveWP v3 Visual Form Builder. Registers via `window.givewp.gateways.register` and renders an info message + logo (no card fields — payment happens off-site). |
 | [assets/wayforpay-logo.svg](assets/) | Gateway logo shown on the donation form. |
@@ -81,7 +82,7 @@ which independently verifies Wayforpay's own signature.
   renewal donation, guarded by idempotency (skips if a donation with that
   `orderReference` already exists).
 - **Cancellation** (`cancelSubscription()`) sends a custom `REMOVE` request
-  (`RemoveSubscriptionRequest`) using **password** credentials. Treats
+  (`WayforpayRemoveSubscriptionRequest`) using **password** credentials. Treats
   "order not found" on Wayforpay's side as success and still marks the local
   subscription cancelled.
 
@@ -112,6 +113,10 @@ values are missing. Live and test have separate option sets
 - **All user-facing strings** use `__()` / `esc_html__()` with the
   `wayforpay-givewp` text domain.
 - **`#[\Override]`** is used on all GiveWP interface/parent overrides (PHP 8.3).
+- **Everything in `includes/` lives in the `WayforpayGiveWP` namespace.** New
+  classes go there too — it is what keeps the plugin out of the global namespace,
+  and Plugin Check's prefix check accepts the namespace as the plugin prefix.
+  The bootstrap file stays in the global namespace and imports what it needs.
 - Failure paths generally throw `PaymentGatewayException` with a terse message;
   webhook failures use `wp_die()` with an HTTP status so Wayforpay retries.
 

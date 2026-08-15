@@ -32,6 +32,37 @@ Payment status is set by a server-to-server webhook from Wayforpay, whose signat
 * GiveWP.
 * A Wayforpay merchant account.
 
+== External services ==
+
+This plugin relies on Wayforpay (https://wayforpay.com/), a third-party payment
+provider, to process donations. Payment cannot work without it.
+
+Donors are redirected to Wayforpay's hosted payment page to pay, so no card
+details are entered on or handled by your site.
+
+The plugin sends data to Wayforpay in these situations:
+
+* **When a donor submits a donation.** The donation is registered with Wayforpay
+  and the donor is redirected to its payment page. Sent: the donor's first and
+  last name, email address, phone number, and billing address (country, street,
+  city, state, postal code); the donation amount, currency, date, and an order
+  reference; the campaign title as the item being paid for; and your site's
+  domain, language, and the two callback URLs Wayforpay uses to report the
+  result.
+* **When a donation is refunded** from the GiveWP donation screen. Sent: the
+  stored transaction reference, amount, and currency.
+* **When a recurring donation is cancelled.** Sent: the stored transaction
+  reference.
+
+Wayforpay also sends payment results back to your site server-to-server. Those
+requests are signature-verified before any donation is updated.
+
+Your Wayforpay merchant credentials are stored in your site's settings and are
+used to sign these requests.
+
+Use of this service is subject to Wayforpay's [terms of service](https://wayforpay.com/en/terms) 
+and [privacy policy](https://help.wayforpay.com/view/755229227).
+
 == Installation ==
 
 1. Install and activate GiveWP.

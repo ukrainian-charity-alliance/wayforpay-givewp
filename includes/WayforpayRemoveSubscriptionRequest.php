@@ -1,5 +1,7 @@
 <?php
 
+namespace WayforpayGiveWP;
+
 use WayForPay\SDK\Contract\EndpointInterface;
 use WayForPay\SDK\Contract\RequestInterface;
 use WayForPay\SDK\Endpoint\ApiRegularEndpoint;
@@ -8,7 +10,7 @@ use WayForPay\SDK\Endpoint\ApiRegularEndpoint;
  * Custom request for removing a subscription from Wayforpay.
  * The Wayforpay SDK doesn't provide this request type, so we implement it here.
  */
-class RemoveSubscriptionRequest implements RequestInterface {
+class WayforpayRemoveSubscriptionRequest implements RequestInterface {
 
 	private string $account;
 	private string $password;

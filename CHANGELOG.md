@@ -12,6 +12,11 @@ changelog by hand.
 
 ## [Unreleased]
 
+### Added
+
+- "External services" section in `readme.txt` documenting what donor data is
+  sent to Wayforpay and when, per WordPress.org plugin guidelines.
+
 ## [1.0.0] - 2026-07-22
 
 ### Added
