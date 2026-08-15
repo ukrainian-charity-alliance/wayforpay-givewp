@@ -12,6 +12,11 @@ changelog by hand.
 
 ## [Unreleased]
 
+### Fixed
+
+- The release zip no longer ships development files from the Composer
+  dependencies.
+
 ## [1.0.1] - 2026-08-15
 
 ### Added

@@ -26,3 +26,23 @@ CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
 *.zip
+
+# Development cruft that ships inside the Composer dependencies. wordpress.org
+# rejects an upload outright when it finds a shell script anywhere in the tree
+# ("The plugin contains unexpected files"), and a dependency's own test suite,
+# examples and CI config are dead weight in a plugin either way.
+*.sh
+vendor/*/*/.github/*
+vendor/*/*/tests/*
+vendor/*/*/test/*
+vendor/*/*/examples/*
+vendor/*/*/.gitignore
+vendor/*/*/.gitattributes
+vendor/*/*/.travis.yml
+vendor/*/*/.scrutinizer.yml
+vendor/*/*/phpci.yml
+vendor/*/*/phpunit.xml
+vendor/*/*/phpunit.xml.dist
+vendor/*/*/composer.lock
+vendor/*/*/CONTRIBUTING.md
+vendor/*/*/CHANGELOG.md
