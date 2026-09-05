@@ -4,34 +4,31 @@ GitHub rulesets are configured through the API or **Settings → Rules → Rules
 not applied automatically from the repo. The JSON files here are kept as the
 source of truth so the configuration is reproducible and reviewable.
 
-`main` is protected by **two** rulesets rather than one. Bypass actors bypass a
-whole ruleset, never a single rule — so the review requirement is kept in its own
-ruleset that repository admins bypass, while the branch protections and the `test`
-status check live in a ruleset nobody bypasses.
+[protect-main.json](protect-main.json) protects the default branch: changes must
+go through a squashed pull request, `test` must pass, history stays linear, and
+the branch cannot be deleted or force-pushed.
 
-| File | What it enforces | Who bypasses |
-| --- | --- | --- |
-| [protect-main.json](protect-main.json) | No deletion, no force-push, linear history, `test` must pass | nobody |
-| [require-review.json](require-review.json) | PR required, 1 approval, threads resolved, squash-only | repository admins, on pull requests only |
+Two deliberate choices:
 
-The admin bypass uses `bypass_mode: "pull_request"`, so admins can merge their own
-PR without an approval once CI is green, but still cannot push straight to `main` —
-the rule that forces changes through a PR is the one being bypassed, and only in
-the context of a PR.
+- **`required_approving_review_count` is `0`.** The PR process is still mandatory —
+  what is not mandatory is a second pair of eyes, which a two-person repository
+  cannot always supply. Raise this to `1` as soon as there are enough reviewers to
+  make it realistic.
+- **`bypass_actors` is empty.** A bypass actor does not merge normally; they merge
+  by explicitly overriding the rules, which is friction on every merge and a habit
+  worth not forming. With no rule left to violate on a routine merge, nobody needs
+  to override anything. In a genuine emergency, edit or disable the ruleset —
+  deliberately, and visibly in the audit log.
 
-To create them:
+To create it:
 
 ```bash
 gh api --method POST \
   /repos/ukrainian-charity-alliance/wayforpay-givewp/rulesets \
   --input .github/rulesets/protect-main.json
-
-gh api --method POST \
-  /repos/ukrainian-charity-alliance/wayforpay-givewp/rulesets \
-  --input .github/rulesets/require-review.json
 ```
 
-To update one that already exists, look up its id and `PUT` to it:
+To update it once it exists, look up its id and `PUT` to it:
 
 ```bash
 gh api /repos/ukrainian-charity-alliance/wayforpay-givewp/rulesets \
@@ -42,4 +39,4 @@ gh api --method PUT \
   --input .github/rulesets/protect-main.json
 ```
 
-Or import a file in the UI: **Settings → Rules → Rulesets → New ruleset → Import**.
+Or import the file in the UI: **Settings → Rules → Rulesets → New ruleset → Import**.
