@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-07
+
 ### Changed
 
 - Renamed plugin to "UCA Payment Gateway with WayForPay for GiveWP", with a

@@ -55,8 +55,36 @@ echo "Current version: $LATEST_TAG"
 echo "New version:     $NEW_VERSION"
 echo ""
 
-# Warn if the changelog has no unreleased entries to ship.
 CHANGELOG="CHANGELOG.md"
+
+# Pre-flight. Bail before touching anything if this release cannot complete
+# cleanly: a run that dies partway through leaves a committed-but-untagged
+# release behind, and re-running it then rolls the changelog a second time.
+if [ -n "$(git status --porcelain)" ]; then
+    echo "Error: working tree is not clean. Commit or stash your changes first."
+    exit 1
+fi
+
+if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null; then
+    echo "Error: tag '$NEW_VERSION' already exists locally."
+    exit 1
+fi
+
+if [ -n "$(git ls-remote --tags origin "refs/tags/$NEW_VERSION")" ]; then
+    echo "Error: tag '$NEW_VERSION' already exists on origin."
+    exit 1
+fi
+
+# Dots are regex wildcards in ERE; match the literal version.
+VERSION_RE=${NEW_VERSION//./\\.}
+if [ -f "$CHANGELOG" ] && grep -qE "^## \[$VERSION_RE\]" "$CHANGELOG"; then
+    echo "Error: CHANGELOG.md already has a section for $NEW_VERSION."
+    echo "       An earlier release run probably failed after committing but"
+    echo "       before tagging. Undo that commit before retrying."
+    exit 1
+fi
+
+# Warn if the changelog has no unreleased entries to ship.
 if [ -f "$CHANGELOG" ]; then
     UNRELEASED=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' "$CHANGELOG" | grep -E '^\s*[-*]' || true)
     if [ -z "$UNRELEASED" ]; then
@@ -79,13 +107,23 @@ then
         git add "$CHANGELOG"
         git commit -m "Release $NEW_VERSION"
         echo "Pushing $BRANCH to origin..."
-        git push origin "$BRANCH"
+        if ! git push origin "$BRANCH"; then
+            echo "Error: push failed (branch protection?). Rolling back the release commit."
+            git reset --hard HEAD~1
+            exit 1
+        fi
     fi
 
     echo "Creating tag $NEW_VERSION..."
     git tag "$NEW_VERSION"
     echo "Pushing tag to origin..."
-    git push origin "$NEW_VERSION"
+    if ! git push origin "$NEW_VERSION"; then
+        echo "Error: tag push failed. Removing the local tag."
+        echo "       The release commit is already pushed; re-push just the tag"
+        echo "       with: git tag $NEW_VERSION && git push origin $NEW_VERSION"
+        git tag -d "$NEW_VERSION"
+        exit 1
+    fi
     echo "Done! The GitHub Action will now build the release for $NEW_VERSION."
 else
     echo "Aborted."
