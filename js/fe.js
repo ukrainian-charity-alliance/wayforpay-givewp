@@ -21,7 +21,7 @@
                 "img",
                 {
                     src: settings.iconUrl,
-                    alt: 'Wayforpay',
+                    alt: 'WayForPay',
                     style: {
                         maxWidth: '160px',
                         height: 'auto'

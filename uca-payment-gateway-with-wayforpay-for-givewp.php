@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Wayforpay Gateway for GiveWP
- * Description: An implementation of Wayforpay as a GiveWP payment gateway.
+ * Plugin Name: UCA Payment Gateway with WayForPay for GiveWP
+ * Description: Adds WayForPay as an off-site payment gateway for GiveWP donation forms.
  * Version: dev
  * Requires at least: 6.6
  * Requires PHP: 8.3
@@ -10,7 +10,7 @@
  * Author URI: https://uba.com.ua
  * License: GPL-3.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
- * Text Domain: wayforpay-givewp
+ * Text Domain: uca-payment-gateway-with-wayforpay-for-givewp
  *
  * @package WayforpayGiveWP
  */

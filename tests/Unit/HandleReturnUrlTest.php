@@ -13,6 +13,7 @@ use Give\Donations\ValueObjects\DonationType;
 use Give\Donors\Models\Donor;
 use Give\Framework\Support\ValueObjects\Money;
 use WayforpayGiveWP\Tests\TestCase;
+use WayforpayGiveWP\WayforpayGateway;
 use WayForPay\SDK\Domain\Reason;
 use WayForPay\SDK\Helper\SignatureHelper;
 
@@ -72,7 +73,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
         $donation = Donation::create([
             'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
+            'gatewayId' => WayforpayGateway::id(),
             'mode' => DonationMode::TEST(),
             'type' => DonationType::SINGLE(),
             'amount' => new Money(1000, 'USD'),
@@ -124,7 +125,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
         $donation = Donation::create([
             'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
+            'gatewayId' => WayforpayGateway::id(),
             'mode' => DonationMode::TEST(),
             'type' => DonationType::SINGLE(),
             'amount' => new Money(1000, 'USD'),
@@ -181,7 +182,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
         $donation = Donation::create([
             'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
+            'gatewayId' => WayforpayGateway::id(),
             'mode' => DonationMode::TEST(),
             'type' => DonationType::SINGLE(),
             'amount' => new Money(1000, 'USD'),
@@ -238,7 +239,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
         $donation = Donation::create([
             'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
+            'gatewayId' => WayforpayGateway::id(),
             'mode' => DonationMode::TEST(),
             'type' => DonationType::SINGLE(),
             'amount' => new Money(1000, 'USD'),
@@ -292,7 +293,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
         $donation = Donation::create([
             'status' => DonationStatus::PENDING(),
-            'gatewayId' => 'test-gateway',
+            'gatewayId' => WayforpayGateway::id(),
             'mode' => DonationMode::TEST(),
             'type' => DonationType::SINGLE(),
             'amount' => new Money(1000, 'USD'),
@@ -342,6 +343,72 @@ class HandleReturnUrlTest extends TestCase
         $this->expectExceptionMessage('invalid signature received from Wayforpay');
 
         $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+    }
+
+    public function testRejectsDonationBelongingToAnotherGateway(): void
+    {
+        // The returnUrl is unauthenticated, so `donation-id` is attacker-controlled. A donation that
+        // was not paid through this gateway must be refused before any note is written to it.
+        $donation = $this->createTestDonation(['gatewayId' => 'some-other-gateway']);
+
+        $_POST = $this->buildSignedPost('Approved', Reason::CODE_OK, 'OK');
+
+        $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
+        $this->expectExceptionMessage('unknown donation-id received from Wayforpay');
+
+        $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+    }
+
+    public function testRejectsUnknownDonationId(): void
+    {
+        $_POST = $this->buildSignedPost('Approved', Reason::CODE_OK, 'OK');
+
+        $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
+        $this->expectExceptionMessage('unknown donation-id received from Wayforpay');
+
+        $this->invokeHandleReturnUrl(['donation-id' => 999999]);
+    }
+
+    public function testUnexpectedPostFieldsAreDiscardedWithoutBreakingSignature(): void
+    {
+        // Sanitization runs before signature verification, so it must leave every signed value
+        // byte-identical while dropping anything the SDK does not read.
+        $donation = $this->createTestDonation();
+
+        $data = $this->buildSignedPost('Approved', Reason::CODE_OK, 'OK');
+        $data['unexpectedField'] = '<script>alert(1)</script>';
+        $data['anotherOne'] = ['nested' => 'array'];
+        $_POST = $data;
+
+        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+
+        $this->assertEquals(give_get_success_page_uri(), $response->getTargetUrl());
+
+        $notes = $donation->notes()->getAll();
+        $this->assertNotEmpty($notes);
+        $content = implode("\n", array_map(static fn ($note) => $note->content, $notes));
+        $this->assertStringNotContainsString('unexpectedField', $content);
+        $this->assertStringNotContainsString('<script>', $content);
+    }
+
+    public function testCallbackNotesOmitDonorContactAndCardDetails(): void
+    {
+        // Donation notes are kept indefinitely and are visible to anyone who can read the donation,
+        // so the payload written to them excludes the donor's contact details and card metadata.
+        $donation = $this->createTestDonation();
+
+        $data = $this->buildSignedPost('Approved', Reason::CODE_OK, 'OK');
+        $data['email'] = 'donor@example.com';
+        $data['phone'] = '380501234567';
+        $_POST = $data;
+
+        $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+
+        $content = implode("\n", array_map(static fn ($note) => $note->content, $donation->notes()->getAll()));
+        $this->assertStringContainsString('orderReference', $content);
+        $this->assertStringNotContainsString('donor@example.com', $content);
+        $this->assertStringNotContainsString('380501234567', $content);
+        $this->assertStringNotContainsString('4111****1111', $content);
     }
 
     /**

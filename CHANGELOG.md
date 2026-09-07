@@ -12,7 +12,22 @@ changelog by hand.
 
 ## [Unreleased]
 
-## [1.0.2] - 2026-08-15
+### Changed
+
+- Renamed plugin to "UCA Payment Gateway with WayForPay for GiveWP", with a
+  matching `uca-payment-gateway-with-wayforpay-for-givewp` slug.
+- `readme.txt` now states that the plugin is not affiliated with WayForPay or
+  GiveWP.
+
+### Security
+
+- Sanitize callback data before calls to WayForPay SDK.
+- Check for donation-id existence in return URL logic.
+- Don't record all fields in Donation Note.
+
+### Fixed
+
+- Webhook errors are only written to the error log when `WP_DEBUG` is enabled.
 
 ### Fixed
 

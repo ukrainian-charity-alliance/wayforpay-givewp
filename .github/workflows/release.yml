@@ -32,8 +32,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          sed -i "s/Version: .*/Version: ${VERSION}/" wayforpay-givewp.php
-          sed -i "s/define( 'WAYFORPAY_GIVEWP_VERSION', '.*' );/define( 'WAYFORPAY_GIVEWP_VERSION', '${VERSION}' );/" wayforpay-givewp.php
+          sed -i "s/Version: .*/Version: ${VERSION}/" uca-payment-gateway-with-wayforpay-for-givewp.php
+          sed -i "s/define( 'WAYFORPAY_GIVEWP_VERSION', '.*' );/define( 'WAYFORPAY_GIVEWP_VERSION', '${VERSION}' );/" uca-payment-gateway-with-wayforpay-for-givewp.php
 
       - name: Sync changelog into readme.txt
         if: startsWith(github.ref, 'refs/tags/')
@@ -45,12 +45,12 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: wayforpay-givewp
-          path: wayforpay-givewp.zip
+          name: uca-payment-gateway-with-wayforpay-for-givewp
+          path: uca-payment-gateway-with-wayforpay-for-givewp.zip
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: wayforpay-givewp.zip
+          files: uca-payment-gateway-with-wayforpay-for-givewp.zip
           generate_release_notes: true

@@ -54,12 +54,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 	#[\Override]
 	public function getName(): string {
-		return __( 'Wayforpay Gateway', 'wayforpay-givewp' );
+		return __( 'WayForPay Gateway', 'uca-payment-gateway-with-wayforpay-for-givewp' );
 	}
 
 	#[\Override]
 	public function getPaymentMethodLabel(): string {
-		return __( 'Wayforpay', 'wayforpay-givewp' );
+		return __( 'WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' );
 	}
 
 	#[\Override]
@@ -78,7 +78,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	public function formSettings( int $formId ): array {
 		// The form settings to send to the JS counterpart. Used for Forms built using the Visual Form Builder.
 		return array(
-			'message' => __( 'You will be redirected to Wayforpay, a secure payment platform where you can pay by credit card, Apple Pay, or Google Pay.', 'wayforpay-givewp' ),
+			'message' => __( 'You will be redirected to WayForPay, a secure payment platform where you can pay by credit card, Apple Pay, or Google Pay.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 			'iconUrl' => WAYFORPAY_GIVEWP_PLUGIN_URL . 'assets/wayforpay-logo.svg',
 		);
 	}
@@ -87,7 +87,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		// For consistency with the Visual Form Builder, display the same message and icon.
 		$settings = $this->formSettings( $formId );
 		return "<div class='wayforpay-gateway-help-text'>
-                    <img src='" . esc_url( $settings['iconUrl'] ) . "' alt='Wayforpay' style='max-width: 160px; height: auto;' />
+                    <img src='" . esc_url( $settings['iconUrl'] ) . "' alt='WayForPay' style='max-width: 160px; height: auto;' />
                     <p>" . esc_html( $settings['message'] ) . '</p>
                 </div>';
 	}
@@ -258,8 +258,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 		// WayForPay may POST transaction data here, but we don't rely on it for status updates.
 		// The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
+		//
+		// There is no nonce to verify: this route is the browser's return leg from Wayforpay's hosted
+		// payment page, so the request originates from a third party and never from a WordPress session.
+		// The route performs no state changes for that reason — it only decides which page the donor sees.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$data = stripslashes_deep( $_POST );
+		$data = $this->sanitizeCallbackData( stripslashes_deep( $_POST ) );
 
 		$donationId = isset( $queryParams['donation-id'] ) ? (int) $queryParams['donation-id'] : null;
 		if ( empty( $donationId ) ) {
@@ -268,6 +272,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 		if ( empty( $data ) ) {
 			throw new PaymentGatewayException( 'no data received from Wayforpay' );
+		}
+
+		// Confirm the donation exists and belongs to this gateway before writing to it,
+		// so an unauthenticated POST cannot append notes to arbitrary donations.
+		$donation = Donation::find( $donationId );
+		if ( empty( $donation ) || $donation->gatewayId !== self::id() ) {
+			throw new PaymentGatewayException( 'unknown donation-id received from Wayforpay' );
 		}
 
 		// If Wayforpay doesn't include a transactionStatus, the user likely cancelled on the payment page.
@@ -279,13 +290,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 					'content'    => sprintf(
 						'User cancelled on Wayforpay. Redirecting to failure page. Query params: %s, POST data: %s',
 						wp_json_encode( $queryParams ),
-						wp_json_encode( $data )
+						$this->loggableCallbackData( $data )
 					),
 				)
 			);
 			return new RedirectResponse(
 				give_get_failed_transaction_uri(
-					'gateway-error=' . rawurlencode( __( 'Payment cancelled', 'wayforpay-givewp' ) )
+					'gateway-error=' . rawurlencode( __( 'Payment cancelled', 'uca-payment-gateway-with-wayforpay-for-givewp' ) )
 				)
 			);
 		}
@@ -332,7 +343,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 					'content'    => sprintf(
 						'Payment successful: redirecting user to success page. Query params: %s, POST data: %s',
 						wp_json_encode( $queryParams ),
-						wp_json_encode( $data )
+						$this->loggableCallbackData( $data )
 					),
 				)
 			);
@@ -350,14 +361,14 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 						'Payment pending at return (status: %s): redirecting user to receipt page; awaiting confirmation. Query params: %s, POST data: %s',
 						$transaction->getStatus(),
 						wp_json_encode( $queryParams ),
-						wp_json_encode( $data )
+						$this->loggableCallbackData( $data )
 					),
 				)
 			);
 			return new RedirectResponse( add_query_arg( 'gateway-status', 'pending', give_get_success_page_uri() ) );
 		} else {
 			$errorMessage = $cancelled
-				? __( 'Payment cancelled', 'wayforpay-givewp' )
+				? __( 'Payment cancelled', 'uca-payment-gateway-with-wayforpay-for-givewp' )
 				: $this->getDisplayErrorMessage( $reason );
 			DonationNote::create(
 				array(
@@ -366,7 +377,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 						'Payment %s: redirecting user to failure page. Query params: %s, POST data: %s',
 						$cancelled ? 'cancelled' : 'failed',
 						wp_json_encode( $queryParams ),
-						wp_json_encode( $data )
+						$this->loggableCallbackData( $data )
 					),
 				)
 			);
@@ -392,11 +403,19 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			/** @var ServiceResponse $response */
 			$response = $handler->parseRequestFromPostRaw();
 		} catch ( \Exception $e ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( sprintf( 'Wayforpay webhook error: %s', $e->getMessage() ) );
+			// A rejected payload has no donation attached to it yet, so there is no donation note to
+			// write it to; the error log is the only place it can go. Debug builds only — production
+			// sites get the 403 and nothing in their logs.
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( sprintf( 'Wayforpay webhook error: %s', $e->getMessage() ) );
+			}
 			wp_die( 'Error: Unable to process request', '', array( 'response' => 403 ) );
 		}
 
+		// No nonce to verify: Wayforpay calls this endpoint server-to-server, so there is no WordPress
+		// session behind the request. Authenticity comes from the merchant signature verified above —
+		// nothing below this point runs unless parseRequestFromPostRaw() accepted the payload.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$queryParams = give_clean( $_GET );
 		$donationId  = isset( $queryParams['donation-id'] ) ? (int) $queryParams['donation-id'] : null;
@@ -416,6 +435,9 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			if ( ! headers_sent() ) {
 				header( 'Content-Type: application/json; charset=utf-8' );
 			}
+			// Not escaped by design: this is a machine-readable JSON body built and encoded by the SDK
+			// (json_encode of an array it assembles), consumed by Wayforpay's retry logic rather than
+			// rendered in a browser. HTML escaping it would corrupt the signature it carries.
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			echo $handler->getSuccessResponse( $transaction );
 			if ( class_exists( '\WPDieException' ) ) { // For unit testing.
@@ -427,7 +449,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		// Handle subscription renewal webhooks.
 		// If subscription-id is present, it may be a renewal or the initial subscription payment.
 		$subscription   = null;
-		$subscriptionId = $queryParams['subscription-id'] ?? null;
+		$subscriptionId = isset( $queryParams['subscription-id'] ) ? (int) $queryParams['subscription-id'] : null;
 		if ( ! empty( $subscriptionId ) ) {
 			$subscription = Subscription::find( $subscriptionId );
 			if ( empty( $subscription ) ) {
@@ -759,26 +781,120 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	}
 
 	/**
+	 * Sanitize a callback payload posted by Wayforpay.
+	 *
+	 * Wayforpay posts a flat set of scalar fields; anything outside the set the SDK reads is dropped,
+	 * and anything non-scalar (which Wayforpay never sends) is dropped with it.
+	 *
+	 * Values that take part in the merchant signature are sanitized as text and nothing more. The
+	 * signature is calculated over the strings exactly as sent, so reformatting any of them breaks
+	 * verification: casting `amount` to a float would turn "100.00" into "100" and every signed
+	 * response would be rejected. Sanitizing before verification is deliberate — the signature is then
+	 * checked against the values actually used, and a payload mangled in transit fails closed.
+	 *
+	 * @see \WayForPay\SDK\Domain\TransactionService::fromArray()
+	 * @see \WayForPay\SDK\Handler\ServiceUrlHandler::parseRequestFromArray()
+	 */
+	private function sanitizeCallbackData( array $raw ): array {
+		// Timestamps are fed to DateTime('@...') by the SDK and take no part in the signature.
+		$integerFields = array( 'createdDate', 'processingDate' );
+
+		$textFields = array(
+			'merchantAccount',
+			'orderReference',
+			'merchantSignature',
+			'amount',
+			'currency',
+			'authCode',
+			'phone',
+			'cardPan',
+			'cardType',
+			'issuerBankCountry',
+			'issuerBankName',
+			'recToken',
+			'transactionStatus',
+			'reason',
+			'reasonCode',
+			'fee',
+			'paymentSystem',
+			'baseAmount',
+			'baseCurrency',
+		);
+
+		$data = array();
+
+		foreach ( $integerFields as $field ) {
+			if ( isset( $raw[ $field ] ) && is_scalar( $raw[ $field ] ) ) {
+				$data[ $field ] = absint( $raw[ $field ] );
+			}
+		}
+
+		foreach ( $textFields as $field ) {
+			if ( isset( $raw[ $field ] ) && is_scalar( $raw[ $field ] ) ) {
+				$data[ $field ] = sanitize_text_field( (string) $raw[ $field ] );
+			}
+		}
+
+		if ( isset( $raw['email'] ) && is_scalar( $raw['email'] ) ) {
+			$data['email'] = sanitize_email( (string) $raw['email'] );
+		}
+
+		if ( isset( $raw['repayUrl'] ) && is_scalar( $raw['repayUrl'] ) ) {
+			$data['repayUrl'] = esc_url_raw( (string) $raw['repayUrl'] );
+		}
+
+		return $data;
+	}
+
+	/**
+	 * The subset of a callback payload that is safe to write into a donation note.
+	 *
+	 * Donation notes are the audit trail for this gateway, but they are stored indefinitely and are
+	 * readable by anyone who can view the donation, so the donor's contact details and card metadata
+	 * are left out. What remains is what an operator needs to trace a payment with Wayforpay support.
+	 */
+	private function loggableCallbackData( array $data ): string {
+		$loggable = array_intersect_key(
+			$data,
+			array_flip(
+				array(
+					'orderReference',
+					'transactionStatus',
+					'reasonCode',
+					'reason',
+					'amount',
+					'currency',
+					'authCode',
+					'paymentSystem',
+					'processingDate',
+				)
+			)
+		);
+
+		return wp_json_encode( $loggable );
+	}
+
+	/**
 	 * User-friendly, translatable strings that can be shown in the frontend.
 	 *
 	 * @see https://wiki.wayforpay.com/en/view/852131
 	 */
 	private function getDisplayErrorMessage( Reason $reason ): string {
 		return match ( $reason->getCode() ) {
-			Reason::CODE_DECLINED_TO_CARD_ISSUER => __( 'Declined by card issuer', 'wayforpay-givewp' ),
-			Reason::CODE_BAD_CVV2 => __( 'Invalid CVV code', 'wayforpay-givewp' ),
-			Reason::CODE_EXPIRED_CARD => __( 'Card expired', 'wayforpay-givewp' ),
-			Reason::CODE_INSUFFICIENT_FUNDS => __( 'Insufficient funds', 'wayforpay-givewp' ),
-			Reason::CODE_INVALID_CARD => __( 'Invalid card number', 'wayforpay-givewp' ),
-			Reason::CODE_EXCEED_WITHDRAWAL_FREQUENCY => __( 'Withdrawal frequency exceeded', 'wayforpay-givewp' ),
-			Reason::CODE_3DS_FAIL => __( '3D Secure verification failed', 'wayforpay-givewp' ),
-			Reason::CODE_INVALID_CURRENCY => __( 'Invalid currency', 'wayforpay-givewp' ),
-			Reason::CODE_FRAUD => __( 'Transaction declined', 'wayforpay-givewp' ),
-			Reason::CODE_GATE_DECLINED => __( 'Transaction declined', 'wayforpay-givewp' ),
-			Reason::CODE_CARDHOLDER_SESSION_EXPIRED => __( 'Card payment session expired', 'wayforpay-givewp' ),
-			Reason::CODE_RESTRICTED_CARD => __( 'Card is restricted', 'wayforpay-givewp' ),
-			Reason::CODE_CARD_LIMITS_FAILED => __( 'Card limit exceeded', 'wayforpay-givewp' ),
-			default => $reason->getMessage() ?: __( 'Payment declined', 'wayforpay-givewp' ),
+			Reason::CODE_DECLINED_TO_CARD_ISSUER => __( 'Declined by card issuer', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_BAD_CVV2 => __( 'Invalid CVV code', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_EXPIRED_CARD => __( 'Card expired', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_INSUFFICIENT_FUNDS => __( 'Insufficient funds', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_INVALID_CARD => __( 'Invalid card number', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_EXCEED_WITHDRAWAL_FREQUENCY => __( 'Withdrawal frequency exceeded', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_3DS_FAIL => __( '3D Secure verification failed', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_INVALID_CURRENCY => __( 'Invalid currency', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_FRAUD => __( 'Transaction declined', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_GATE_DECLINED => __( 'Transaction declined', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_CARDHOLDER_SESSION_EXPIRED => __( 'Card payment session expired', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_RESTRICTED_CARD => __( 'Card is restricted', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			Reason::CODE_CARD_LIMITS_FAILED => __( 'Card limit exceeded', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+			default => $reason->getMessage() ?: __( 'Payment declined', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 		};
 	}
 
