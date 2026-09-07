@@ -1,4 +1,4 @@
-# Wayforpay Gateway for GiveWP
+# UCA Payment Gateway with WayForPay for GiveWP
 
 [![Tests](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/actions/workflows/test.yml/badge.svg)](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/actions/workflows/test.yml)
 [![Latest release](https://img.shields.io/github/v/release/ukrainian-charity-alliance/wayforpay-givewp)](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/releases)
@@ -14,7 +14,7 @@
 The recommended way to install this plugin is by downloading the pre-built release from GitHub.
 
 **From a Release (Recommended):**
-1. Download the latest `wayforpay-givewp.zip` file from the [Releases page](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/releases) on GitHub.
+1. Download the latest `uca-payment-gateway-with-wayforpay-for-givewp.zip` file from the [Releases page](https://github.com/ukrainian-charity-alliance/wayforpay-givewp/releases) on GitHub.
 2. In your WordPress admin panel, go to **Plugins → Add New Plugin**.
 3. Click **Upload Plugin**, select the downloaded `.zip` file, and click **Install Now**.
 4. Activate the plugin.
@@ -62,7 +62,7 @@ composer docker:down
 
 [Plugin Check](https://wordpress.org/plugins/plugin-check/) is the WordPress.org review tooling. It validates `readme.txt`, the plugin headers and the shipped code against the plugin directory guidelines, which is a different job from `composer lint` — PHPCS enforces the coding standards, Plugin Check enforces the directory guidelines.
 
-It runs against the **distributed** plugin rather than the working tree, so `tests/`, `scripts/` and dev dependencies are not reported. The plugin is built into `build/wayforpay-givewp/` from [.distignore](.distignore) — the same file list `composer zip` ships — and left there afterwards, so you can inspect exactly what was checked.
+It runs against the **distributed** plugin rather than the working tree, so `tests/`, `scripts/` and dev dependencies are not reported. The plugin is built into `build/uca-payment-gateway-with-wayforpay-for-givewp/` from [.distignore](.distignore) — the same file list `composer zip` ships — and left there afterwards, so you can inspect exactly what was checked.
 
 ### Prerequisites
 
@@ -103,7 +103,7 @@ composer release minor   # e.g., 1.0.0 -> 1.1.0
 composer release major   # e.g., 1.0.0 -> 2.0.0
 ```
 
-The script moves the `[Unreleased]` entries into a dated `[VERSION]` section in `CHANGELOG.md`, commits that, then tags and pushes. Once pushed, the GitHub Action intercepts the tag, runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `wayforpay-givewp.zip` to a new GitHub Release.
+The script moves the `[Unreleased]` entries into a dated `[VERSION]` section in `CHANGELOG.md`, commits that, then tags and pushes. Once pushed, the GitHub Action intercepts the tag, runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release.
 
 Alternatively, you can manually create a release and tag from the GitHub UI (**Releases** → **Draft a new release**). In that case the changelog sync reads whatever is under `[Unreleased]` in `CHANGELOG.md`, so make sure it is up to date before tagging.
 

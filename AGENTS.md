@@ -13,7 +13,7 @@ When making changes:
 - Follow the conventions documented in
   [ARCHITECTURE.md](ARCHITECTURE.md#conventions) — most importantly, keep the
   `DonationNote` / `SubscriptionNote` logging on every notable step and failure
-  branch, use the `wayforpay-givewp` text domain for user-facing strings, and
+  branch, use the `uca-payment-gateway-with-wayforpay-for-givewp` text domain for user-facing strings, and
   keep `#[\Override]` on GiveWP interface/parent overrides.
 - Record user-facing changes under `## [Unreleased]` in
   [CHANGELOG.md](CHANGELOG.md). Do not hand-edit the changelog in `readme.txt`.

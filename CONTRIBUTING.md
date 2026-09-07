@@ -47,16 +47,17 @@ locally when you touch any of the above:
 composer plugin-check   # requires Docker; see the README
 ```
 
-If a finding is a false positive, add its code to `IGNORED_CODES` at the top of
+The report is expected to be clean. Nothing is suppressed by check code: if a
+finding really is a false positive, filter the specific message in
 [scripts/plugin-check.sh](scripts/plugin-check.sh) with a comment explaining why,
-rather than widening the ignore list silently.
+so other findings of the same code still fail the run.
 
 A few repository conventions to preserve:
 
 - **Donation notes are the log.** Every notable step and every failure branch
   writes a `DonationNote` / `SubscriptionNote`. Keep this when adding logic.
 - **All user-facing strings** use `__()` / `esc_html__()` with the
-  `wayforpay-givewp` text domain.
+  `uca-payment-gateway-with-wayforpay-for-givewp` text domain.
 - **`#[\Override]`** is used on all GiveWP interface/parent overrides.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a deeper tour of the architecture

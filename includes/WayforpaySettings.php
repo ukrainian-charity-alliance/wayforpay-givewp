@@ -44,7 +44,7 @@ class WayforpaySettings {
 	 * @return array Modified sections array
 	 */
 	public static function addSection( array $sections ): array {
-		$sections['wayforpay'] = __( 'Wayforpay', 'wayforpay-givewp' );
+		$sections['wayforpay'] = __( 'WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' );
 		return $sections;
 	}
 
@@ -66,28 +66,28 @@ class WayforpaySettings {
 				'type' => 'title',
 			),
 			array(
-				'name' => __( 'Wayforpay Settings', 'wayforpay-givewp' ),
-				'desc' => __( 'Configure your Wayforpay payment gateway credentials. You can find these in your Wayforpay merchant dashboard.', 'wayforpay-givewp' ),
+				'name' => __( 'WayForPay Settings', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc' => __( 'Configure your WayForPay payment gateway credentials. You can find these in your WayForPay merchant dashboard.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'type' => 'give_title',
 				'id'   => 'wayforpay_settings_header',
 			),
 			array(
-				'name'    => __( 'Merchant Account', 'wayforpay-givewp' ),
-				'desc'    => __( 'Enter your Wayforpay merchant account identifier (e.g., www_example_com). This is provided in your Wayforpay dashboard.', 'wayforpay-givewp' ),
+				'name'    => __( 'Merchant Account', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'Enter your WayForPay merchant account identifier (e.g., www_example_com). This is provided in your WayForPay dashboard.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_merchant_account',
 				'type'    => 'text',
 				'default' => '',
 			),
 			array(
-				'name'    => __( 'Secret Key', 'wayforpay-givewp' ),
-				'desc'    => __( 'Enter your Wayforpay secret key used for signing API requests. Keep this secure and never share it publicly.', 'wayforpay-givewp' ),
+				'name'    => __( 'Secret Key', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'Enter your WayForPay secret key used for signing API requests. Keep this secure and never share it publicly.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_secret_key',
 				'type'    => 'api_key',
 				'default' => '',
 			),
 			array(
-				'name'    => __( 'Merchant Password', 'wayforpay-givewp' ),
-				'desc'    => __( 'Your Wayforpay merchant password. Only required for subscription cancellation functionality.', 'wayforpay-givewp' ),
+				'name'    => __( 'Merchant Password', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'Your WayForPay merchant password. Only required for subscription cancellation functionality.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_merchant_password',
 				'type'    => 'api_key',
 				'default' => '',
@@ -104,28 +104,28 @@ class WayforpaySettings {
 				'type' => 'title',
 			),
 			array(
-				'name' => __( 'Test Mode Settings', 'wayforpay-givewp' ),
-				'desc' => __( 'Configure credentials for the Wayforpay test environment.', 'wayforpay-givewp' ),
+				'name' => __( 'Test Mode Settings', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc' => __( 'Configure credentials for the WayForPay test environment.', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'type' => 'give_title',
 				'id'   => 'wayforpay_test_settings_header',
 			),
 			array(
-				'name'    => __( 'Test Merchant Account', 'wayforpay-givewp' ),
-				'desc'    => __( 'Wayforpay test merchant account. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852472', 'wayforpay-givewp' ),
+				'name'    => __( 'Test Merchant Account', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'WayForPay test merchant account. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852472', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_test_merchant_account',
 				'type'    => 'text',
 				'default' => '',
 			),
 			array(
-				'name'    => __( 'Test Secret Key', 'wayforpay-givewp' ),
-				'desc'    => __( 'Wayforpay test secret key. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852472', 'wayforpay-givewp' ),
+				'name'    => __( 'Test Secret Key', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'WayForPay test secret key. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852472', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_test_secret_key',
 				'type'    => 'text',
 				'default' => '',
 			),
 			array(
-				'name'    => __( 'Test Merchant Password', 'wayforpay-givewp' ),
-				'desc'    => __( 'Wayforpay test merchant password. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852521', 'wayforpay-givewp' ),
+				'name'    => __( 'Test Merchant Password', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
+				'desc'    => __( 'WayForPay test merchant password. Used when GiveWP Test Mode is enabled. See: https://wiki.wayforpay.com/en/view/852521', 'uca-payment-gateway-with-wayforpay-for-givewp' ),
 				'id'      => 'wayforpay_test_merchant_password',
 				'type'    => 'text',
 				'default' => '',

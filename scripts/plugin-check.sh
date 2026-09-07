@@ -18,15 +18,18 @@
 #
 # Examples:
 #   bash scripts/plugin-check.sh
-#   bash scripts/plugin-check.sh --format=csv
 #   bash scripts/plugin-check.sh --categories=security,plugin_repo
+#
+# --format is rejected: the pass/fail gate at the bottom reads the default
+# report layout, and another format would silently stop it finding anything.
 #
 # Only static checks run here — that is the WP-CLI default. The runtime checks
 # additionally need the plugin activated, which means a working GiveWP install.
 
 set -euo pipefail
 
-SLUG="wayforpay-givewp"
+SLUG="uca-payment-gateway-with-wayforpay-for-givewp"
+PLUGIN_FILE="$SLUG.php"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT/build"
 DIST_DIR="$BUILD_DIR/$SLUG"
@@ -43,19 +46,18 @@ WP_VOLUME="$PREFIX-wp"
 DB_IMAGE="mariadb:lts"
 WP_IMAGE="wordpress:cli"
 
-# `Stable tag: trunk` is the placeholder this repository commits; the release
-# tooling stamps the real version into readme.txt (scripts/changelog-to-readme.php),
-# so the code only ever fires here. A genuine header/readme disagreement is
-# reported as stable_tag_mismatch, which is deliberately not ignored.
+# Nothing is passed to `wp plugin check --ignore-codes`. Every check runs, and the
+# single finding this plugin cannot act on is filtered out by name below, so a new
+# finding of the same code still fails the gate.
 #
-# `trademarked_term` fires on the restricted term "wp", which Plugin Check finds
-# by plain substring match inside "GiveWP". Its own term list annotates that
-# entry `'wp', // it's allowed, but shows a warning.`, and the rules that would
-# genuinely apply — the begins-with restrictions on "givewp-" and "wp-" — are not
-# triggered by the slug "wayforpay-givewp". Unlike most codes this one reads only
-# the plugin name and slug, and the slug cannot change once wordpress.org has
-# approved it, so nothing new can hide behind this.
-IGNORED_CODES="trunk_stable_tag,trademarked_term"
+# That finding is `trademarked_term` on the restricted term "wp", which Plugin
+# Check locates by plain substring match inside "GiveWP" — a word the name has to
+# contain to describe what the plugin extends. Plugin Check's own term list
+# annotates the entry `'wp', // it's allowed, but shows a warning.`, and the rules
+# that would genuinely apply — the begins-with restrictions on "givewp-" and "wp-"
+# — are not triggered by a slug that begins with "uca-". Any other restricted term,
+# in the name or the slug, is reported and fails.
+BENIGN_FINDING='trademarked_term.*restricted term "wp"'
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "Error: Docker is required to run Plugin Check." >&2
@@ -77,7 +79,7 @@ for tool in zip unzip composer; do
     fi
 done
 
-# Build the distributed plugin tree in build/wayforpay-givewp/.
+# Build the distributed plugin tree in build/<slug>/.
 cd "$ROOT"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
@@ -94,6 +96,21 @@ rm -f "$STAGE_ZIP"
 zip -q -r "$STAGE_ZIP" . -x@"$EXCLUDES"
 unzip -q "$STAGE_ZIP" -d "$DIST_DIR"
 rm -f "$STAGE_ZIP" "$EXCLUDES"
+
+# `Version:` and `Stable tag:` are committed as placeholders ("dev" and "trunk");
+# the release workflow stamps the real version at tag time. Stamp the same value
+# into the build so the check sees the plugin in the shape it ships, rather than
+# reporting placeholders that never reach wordpress.org. Both come from one
+# source, so this cannot paper over a genuine disagreement between them: what it
+# removes is the placeholder noise, not the stable_tag_mismatch check.
+VERSION="$(sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' CHANGELOG.md | head -n 1)"
+if [ -z "$VERSION" ]; then
+    echo "Error: could not read a released version from CHANGELOG.md." >&2
+    exit 1
+fi
+sed -i.bak "s/^ \* Version: .*/ * Version: $VERSION/" "$DIST_DIR/$PLUGIN_FILE"
+sed -i.bak "s/^Stable tag:.*/Stable tag: $VERSION/" "$DIST_DIR/readme.txt"
+rm -f "$DIST_DIR/$PLUGIN_FILE.bak" "$DIST_DIR/readme.txt.bak"
 
 # Install production-only dependencies out of tree, then move vendor/ into the
 # build, so the repository's own vendor/ (with dev dependencies) is untouched.
@@ -142,7 +159,6 @@ docker run --rm --network "$NETWORK" --user root \
     -v "$DIST_DIR:/var/www/html/wp-content/plugins/$SLUG:ro" \
     -e WP_CLI_ALLOW_ROOT=1 \
     -e PLUGIN_SLUG="$SLUG" \
-    -e IGNORED_CODES="$IGNORED_CODES" \
     -e DB_HOST="$DB_CONTAINER" \
     --entrypoint sh \
     "$WP_IMAGE" -c '
@@ -169,17 +185,33 @@ docker run --rm --network "$NETWORK" --user root \
 
         echo "WordPress $($WP core version), Plugin Check $($WP plugin get plugin-check --field=version)"
         echo
-        exec $WP plugin check "$PLUGIN_SLUG" --ignore-codes="$IGNORED_CODES" "$@"
+        exec $WP plugin check "$PLUGIN_SLUG" "$@"
     ' sh "$@" | tee "$REPORT"
 
 # `wp plugin check` exits 0 even when it reports findings, so the gate is derived
-# here. Findings are printed grouped under a "FILE: <path>" heading, and a file
-# only gets one when it has at least one finding. The `strict-*` formats skip that
-# grouping, so passing one would turn the gate off.
-if grep -q '^FILE: ' "$REPORT"; then
+# here. In the default format each finding is a tab-separated row starting with
+# the line and column numbers, under a "FILE: <path>" heading. Passing a different
+# --format would change that shape and turn the gate off, so refuse to guess.
+if grep -q -- '--format' <<< "$*"; then
+    echo
+    echo "Error: --format changes the report shape the gate reads; run without it." >&2
+    exit 1
+fi
+
+FINDING_ROW='^[0-9]+	[0-9]+	'
+BENIGN_COUNT="$(grep -Ec "$FINDING_ROW.*$BENIGN_FINDING" "$REPORT" || true)"
+REAL_FINDINGS="$(grep -E "$FINDING_ROW" "$REPORT" | grep -Ev "$BENIGN_FINDING" || true)"
+
+if [ -n "$REAL_FINDINGS" ]; then
     echo
     echo "Error: Plugin Check reported the findings above." >&2
     exit 1
 fi
 
-echo "Plugin Check found no issues."
+if [ "$BENIGN_COUNT" -gt 0 ]; then
+    echo
+    echo "Plugin Check found no issues (ignored $BENIGN_COUNT known finding(s):"
+    echo "the restricted term \"wp\", matched inside \"GiveWP\" — see the note in this script)."
+else
+    echo "Plugin Check found no issues."
+fi

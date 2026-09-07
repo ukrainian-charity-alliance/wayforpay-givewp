@@ -44,7 +44,7 @@ tests_add_filter('muplugins_loaded', function () {
     }
 
     // Load Wayforpay gateway plugin
-    require_once dirname(__DIR__) . '/wayforpay-givewp.php';
+    require_once dirname(__DIR__) . '/uca-payment-gateway-with-wayforpay-for-givewp.php';
 });
 
 /**

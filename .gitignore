@@ -10,7 +10,7 @@
 
 # Composer
 /vendor/
-wayforpay-givewp.zip
+uca-payment-gateway-with-wayforpay-for-givewp.zip
 
 # Build output (scripts/plugin-check.sh)
 /build/

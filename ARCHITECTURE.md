@@ -20,7 +20,7 @@ payment page.
 
 | Path | Role |
 | --- | --- |
-| [wayforpay-givewp.php](wayforpay-givewp.php) | Plugin bootstrap. Defines constants, loads the autoloader, hooks into GiveWP to register settings (`give_init`) and the gateway (`givewp_register_payment_gateway`). |
+| [uca-payment-gateway-with-wayforpay-for-givewp.php](uca-payment-gateway-with-wayforpay-for-givewp.php) | Plugin bootstrap. Defines constants, loads the autoloader, hooks into GiveWP to register settings (`give_init`) and the gateway (`givewp_register_payment_gateway`). |
 | [includes/WayforpayGateway.php](includes/WayforpayGateway.php) | The gateway. Extends GiveWP's `PaymentGateway`; implements `WebhookNotificationsListener` and `PaymentGatewayRefundable`. |
 | [includes/WayforpayRemoveSubscriptionRequest.php](includes/WayforpayRemoveSubscriptionRequest.php) | Small SDK request class for subscription removal, which the Wayforpay SDK does not provide. |
 | [includes/WayforpaySettings.php](includes/WayforpaySettings.php) | Admin settings under *Give → Settings → Payment Gateways → Wayforpay*. Registers fields and exposes credential accessors that switch between live/test based on GiveWP test mode. |
@@ -111,7 +111,7 @@ values are missing. Live and test have separate option sets
 - **Donation notes are the log.** Every notable step and every failure branch writes
   a `DonationNote` / `SubscriptionNote`. Preserve this when adding logic.
 - **All user-facing strings** use `__()` / `esc_html__()` with the
-  `wayforpay-givewp` text domain.
+  `uca-payment-gateway-with-wayforpay-for-givewp` text domain.
 - **`#[\Override]`** is used on all GiveWP interface/parent overrides (PHP 8.3).
 - **Everything in `includes/` lives in the `WayforpayGiveWP` namespace.** New
   classes go there too — it is what keeps the plugin out of the global namespace,
@@ -136,16 +136,24 @@ Dockerised WordPress. It complements `composer lint` rather than duplicating it:
 PHPCS enforces the coding standards, Plugin Check enforces the plugin directory
 guidelines (readme.txt, plugin headers, trademarks, global namespace hygiene).
 
-The report is expected to be empty. `wp plugin check` itself exits 0 even when it
-reports problems, so [scripts/plugin-check.sh](scripts/plugin-check.sh) derives
-the exit status from whether anything was reported and fails on any finding —
-that is what lets it gate CI. Known false positives are listed
-in `IGNORED_CODES` at the top of the script, each with a comment explaining why it
-is safe to ignore.
+Every check runs; nothing is passed to `--ignore-codes`. `wp plugin check` itself
+exits 0 even when it reports problems, so
+[scripts/plugin-check.sh](scripts/plugin-check.sh) derives the exit status from the
+findings it reported and fails on any of them — that is what lets it gate CI.
+
+One finding is filtered out by name rather than suppressed by code: the restricted
+term `wp`, which Plugin Check matches as a substring inside "GiveWP" and which the
+plugin name cannot avoid. It is still printed, and any other `trademarked_term`
+finding — a different term, or a slug that genuinely begins with a restricted
+prefix — fails the run. See `BENIGN_FINDING` in the script.
+
+The build the check runs against is stamped with the current released version, so
+`Version:` and `Stable tag:` are the values that ship rather than the `dev` and
+`trunk` placeholders the repository commits.
 
 ## Building a release
 
-`composer zip` installs prod-only dependencies, produces `wayforpay-givewp.zip`
+`composer zip` installs prod-only dependencies, produces `uca-payment-gateway-with-wayforpay-for-givewp.zip`
 (excluding dev/test/tooling files), then restores dev dependencies. What ships is
 defined by [.distignore](.distignore), which is also what `composer plugin-check`
 builds from — one exclusion list, so the checked plugin and the shipped plugin
