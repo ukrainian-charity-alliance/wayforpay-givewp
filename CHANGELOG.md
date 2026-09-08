@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-09
+
 ### Fixed
 
 - The changelog now lists all released versions, not only the latest.
