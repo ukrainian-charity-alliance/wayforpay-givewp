@@ -94,18 +94,30 @@ This repository uses GitHub Actions to automatically build and attach the produc
 
 Record user-facing changes under the `[Unreleased]` heading in [CHANGELOG.md](CHANGELOG.md) as you work, using the [Keep a Changelog](https://keepachangelog.com/) format. **Do not edit the changelog in `readme.txt` by hand** — the release tooling converts the changelog entries into WordPress readme.txt format and stamps the `Stable tag` automatically.
 
-Helper script to tag new releases and trigger the GitHub Actions release workflow:
+### Cutting a release
+
+A release takes two commands: one to open the release pull request, one to tag it after it merges.
+
+**1. Prepare.** From a clean working tree — it does not matter which branch you are on:
 
 ```bash
-# Calculate the next version, tag it, and push to GitHub
-composer release patch   # e.g., 1.0.0 -> 1.0.1
-composer release minor   # e.g., 1.0.0 -> 1.1.0
-composer release major   # e.g., 1.0.0 -> 2.0.0
+composer release:prepare patch   # e.g., 1.0.0 -> 1.0.1
+composer release:prepare minor   # e.g., 1.0.0 -> 1.1.0
+composer release:prepare major   # e.g., 1.0.0 -> 2.0.0
 ```
 
-The script moves the `[Unreleased]` entries into a dated `[VERSION]` section in `CHANGELOG.md`, commits that, then tags and pushes. Once pushed, the GitHub Action intercepts the tag, runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release.
+This moves the `[Unreleased]` entries into a dated `## [X.Y.Z]` section, pushes a `release/X.Y.Z` branch, and opens its pull request. Review and merge it as usual.
 
-Alternatively, you can manually create a release and tag from the GitHub UI (**Releases** → **Draft a new release**). In that case the changelog sync reads whatever is under `[Unreleased]` in `CHANGELOG.md`, so make sure it is up to date before tagging.
+**2. Tag,** once that pull request has merged:
+
+```bash
+composer release:tag           # tags the version that just merged
+composer release:tag 1.2.0     # or name the version explicitly
+```
+
+The GitHub Action then runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release.
+
+Always release through these two commands. Tagging by hand, or drafting a release from the GitHub UI, skips the changelog roll that the tooling depends on and leaves the next release unable to work out its own version.
 
 ## Support Ukrainian Charity Alliance
 
