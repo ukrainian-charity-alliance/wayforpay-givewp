@@ -64,6 +64,10 @@ function wfp_extract_section( string $markdown, string $heading ): ?array {
  * `### Category` headings become a prefix on each following bullet, so
  * "### Fixed" + "- foo" becomes "* Fixed: foo". Ungrouped bullets stay plain.
  *
+ * Changelog bullets wrap across lines; readme.txt bullets cannot. An indented
+ * line following a bullet is folded back onto it, so a wrapped entry survives
+ * whole rather than being truncated at the first line break.
+ *
  * @param string[] $lines Raw body lines.
  * @return string[]       readme.txt-formatted bullet lines.
  */
@@ -84,6 +88,12 @@ function wfp_to_readme_bullets( array $lines ): array {
 		if ( preg_match( '/^[-*]\s+(.+)$/', $trimmed, $m ) ) {
 			$text      = trim( $m[1] );
 			$bullets[] = '' !== $category ? "* {$category}: {$text}" : "* {$text}";
+			continue;
+		}
+		// Indentation is what marks a continuation, so unindented prose is
+		// skipped as before rather than being glued onto the previous entry.
+		if ( ! empty( $bullets ) && preg_match( '/^\s/', $line ) ) {
+			$bullets[ array_key_last( $bullets ) ] .= ' ' . $trimmed;
 		}
 	}
 

@@ -84,8 +84,11 @@ repository.
   Any working branch should be short-lived and deleted immediately after merge.
   Long-lived feature branches are not used.
 
-Releases are cut from `main` by tagging (see [README.md](README.md)); there are
-no release or maintenance branches.
+Releases are tagged on `main` (see [README.md](README.md)). `composer
+release:prepare` opens a short-lived `release/X.Y.Z` branch carrying only the
+changelog roll, because `main` is protected and cannot be pushed to directly;
+it is deleted after merge like any other topic branch. There are no long-lived
+release or maintenance branches.
 
 ## Pull request process
 
