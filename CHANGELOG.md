@@ -31,6 +31,8 @@ changelog by hand.
 
 - Webhook errors are only written to the error log when `WP_DEBUG` is enabled.
 
+## [1.0.2] - 2026-08-15
+
 ### Fixed
 
 - The release zip no longer ships development files from the Composer
