@@ -12,6 +12,11 @@ changelog by hand.
 
 ## [Unreleased]
 
+### Fixed
+
+- The changelog now lists all released versions, not only the latest.
+- Long changelog entries are no longer cut off mid-sentence.
+
 ## [1.1.0] - 2026-09-07
 
 ### Changed
