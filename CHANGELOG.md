@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-07
+
 ### Changed
 
 - Renamed plugin to "UCA Payment Gateway with WayForPay for GiveWP", with a
@@ -28,6 +30,8 @@ changelog by hand.
 ### Fixed
 
 - Webhook errors are only written to the error log when `WP_DEBUG` is enabled.
+
+## [1.0.2] - 2026-08-15
 
 ### Fixed
 
