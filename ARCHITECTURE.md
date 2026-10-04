@@ -34,15 +34,19 @@ The gateway uses Wayforpay's **off-site redirect** model. The donor never enters
 card details on the WordPress site.
 
 1. **Create payment** — `createPayment()` (or `createSubscription()` for recurring)
-   calls `redirectToWayforpay()`.
-   - Builds a Wayforpay `PurchaseWizard` from the donation: order reference
-     (`{donationId}-{timestamp}`), amount, currency, campaign title as the single
-     product, donor client metadata, and `returnUrl` + `serviceUrl`.
-   - **Server-side redirect indirection**: instead of letting the SDK render an
-     auto-submitting form, the plugin POSTs the signed form data to Wayforpay via
-     `wp_remote_post` with `redirection => 0`, then extracts the `Location` header
-     and returns it as a `RedirectOffsite`. This keeps the redirect on the server
-     and avoids a self-submitting HTML form in the browser.
+   returns a `RedirectOffsite` to `handlePaymentRedirect`, a secure route on the site.
+   - `buildPaymentForm()` builds a Wayforpay `PurchaseWizard` from the donation:
+     order reference (`{donationId}-{timestamp}`), amount, currency, campaign title
+     as the single product, donor client metadata, and `returnUrl` + `serviceUrl`.
+     It runs once up front so configuration errors show on the donation form.
+   - `handlePaymentRedirect` renders a page that auto-submits the signed form to
+     Wayforpay from the **donor's browser**. Wayforpay sits behind Cloudflare; a
+     server-side POST put every donor on the site's IP and got rate limited (429).
+     The form posts to the top window: legacy iframe templates (e.g. Sequoia) load
+     this page inside the form's iframe, since GiveWP only breaks out of the
+     iframe for redirects to other sites.
+     It only serves pending donations, so revisiting it (e.g. the back button)
+     after paying does not start a second payment.
    - Extensive `DonationNote::create()` logging at each step (and on every failure
      path) — donation notes are the primary audit/debug trail.
 
@@ -65,18 +69,21 @@ card details on the WordPress site.
 
 ### Why returnUrl and serviceUrl are non-secure routes
 
-`secureRouteMethods` is intentionally **empty** (see the comment in the gateway).
 Wayforpay limits `returnUrl`/`serviceUrl` to 256 chars, and GiveWP's secure-route
 signature params push the URLs past that limit. So these are registered as plain
 `routeMethods`. This is safe because status changes only happen in the webhook,
 which independently verifies Wayforpay's own signature.
 
+`handlePaymentRedirect` is never sent to Wayforpay, so it is a secure route. It
+reads the donation from the signed `give-route-signature-id`, because GiveWP
+before 4.16.8 does not sign a route's other query args.
+
 ## Subscriptions (recurring)
 
-- `supportsSubscriptions()` returns true. `createSubscription()` maps GiveWP periods
-  (day/week/month/quarter/year) to Wayforpay `Regular::MODE_*`, computes the next
-  charge date and installment count, and redirects with an extra
-  `subscription-id` service-URL param.
+- `supportsSubscriptions()` returns true. `buildRegular()` maps GiveWP periods
+  (day/week/month/quarter/year) to Wayforpay `Regular::MODE_*` and computes the
+  next charge date and installment count. The service URL gets an extra
+  `subscription-id` param.
 - **Renewals** arrive on the same webhook. When `subscription-id` is present and the
   original donation is already complete, `handleRenewal()` runs — it creates a GiveWP
   renewal donation, guarded by idempotency (skips if a donation with that

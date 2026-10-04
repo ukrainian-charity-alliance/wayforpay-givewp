@@ -12,14 +12,10 @@ changelog by hand.
 
 ## [Unreleased]
 
-### Changed
-
-- Failed redirects to WayForPay now log response headers and a short excerpt
-  of the response.
-
 ### Fixed
 
-- Crash when WayForPay redirects without a `Location` header.
+- Donations failing with HTTP 429 from WayForPay on busy sites. The redirect
+  is now browser-side instead of server-side.
 
 ## [1.1.1] - 2026-09-09
 

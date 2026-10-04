@@ -3,13 +3,20 @@
 namespace WayforpayGiveWP\Tests\Unit;
 
 use Give\Donations\Models\Donation;
+use Give\Donations\ValueObjects\DonationStatus;
+use Give\Donations\ValueObjects\DonationType;
+use Give\Framework\Http\Response\Types\RedirectResponse;
 use Give\Framework\PaymentGateways\Commands\RedirectOffsite;
 use Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException;
+use Give\Subscriptions\Models\Subscription;
+use Give\Subscriptions\ValueObjects\SubscriptionMode;
+use Give\Subscriptions\ValueObjects\SubscriptionPeriod;
+use Give\Subscriptions\ValueObjects\SubscriptionStatus;
+use WayForPay\SDK\Helper\SignatureHelper;
 use WayforpayGiveWP\Tests\TestCase;
-use WpOrg\Requests\Utility\CaseInsensitiveDictionary;
 
 /**
- * Tests for the server-side request that obtains the Wayforpay payment page URL.
+ * Tests for sending the donor to Wayforpay: the redirect from the donation form, then the page that posts to Wayforpay.
  */
 class RedirectToWayforpayTest extends TestCase
 {
@@ -19,21 +26,77 @@ class RedirectToWayforpayTest extends TestCase
     {
         parent::setUp();
         $this->gateway = $this->createGateway();
+
+        // The donor's browser posts to Wayforpay; the site itself must not.
+        add_filter('pre_http_request', function ($pre, $args, $url) {
+            if (str_contains($url, 'wayforpay.com')) {
+                $this->fail("Unexpected server-side request to $url");
+            }
+            return $pre;
+        }, 10, 3);
+    }
+
+    public function tearDown(): void
+    {
+        unset($_GET['give-route-signature-id']);
+        parent::tearDown();
     }
 
     /**
-     * Answer the gateway's wp_remote_post() with a canned response. Headers are a
-     * CaseInsensitiveDictionary, as they are for a real response.
+     * Call the payment page route as GiveWP does once it has verified the signed donation ID.
+     *
+     * @return array{0: ?RedirectResponse, 1: string} The route's response and the page it rendered.
      */
-    private function mockWayforpayResponse(int $code, array $headers, string $body = ''): void
+    private function callPaymentRedirect(Donation $donation, array $queryParams = []): array
     {
-        add_filter('pre_http_request', static fn () => [
-            'headers' => new CaseInsensitiveDictionary($headers),
-            'body' => $body,
-            'response' => ['code' => $code, 'message' => ''],
-            'cookies' => [],
-            'filename' => null,
-        ]);
+        $_GET['give-route-signature-id'] = (string) $donation->id;
+        ob_start();
+        try {
+            $response = $this->gateway->callRouteMethod('handlePaymentRedirect', $queryParams);
+        } finally {
+            $html = ob_get_clean();
+        }
+        return [$response, $html];
+    }
+
+    /**
+     * The fields a browser posts when it submits the rendered form.
+     */
+    private function getPostedFields(string $html): array
+    {
+        $doc = new \DOMDocument();
+        $doc->loadHTML($html, LIBXML_NOERROR);
+        $fields = [];
+        foreach ($doc->getElementsByTagName('input') as $input) {
+            $name = $input->getAttribute('name');
+            if (str_ends_with($name, '[]')) {
+                $fields[substr($name, 0, -2)][] = $input->getAttribute('value');
+            } elseif ($name !== '') {
+                $fields[$name] = $input->getAttribute('value');
+            }
+        }
+        return $fields;
+    }
+
+    /**
+     * The signature Wayforpay expects for the posted fields.
+     */
+    private function expectedSignature(array $fields): string
+    {
+        return SignatureHelper::calculateSignature(
+            [
+                $fields['merchantAccount'],
+                $fields['merchantDomainName'],
+                $fields['orderReference'],
+                $fields['orderDate'],
+                $fields['amount'],
+                $fields['currency'],
+                $fields['productName'],
+                $fields['productCount'],
+                $fields['productPrice'],
+            ],
+            self::TEST_MERCHANT_SECRET
+        );
     }
 
     private function getNotesContent(Donation $donation): string
@@ -41,69 +104,104 @@ class RedirectToWayforpayTest extends TestCase
         return implode("\n", array_map(static fn ($note) => $note->content, $donation->notes()->getAll()));
     }
 
-    public function testRedirectsDonorToLocationProvidedByWayforpay(): void
+    public function testCreatePaymentRedirectsToSignedPaymentPage(): void
     {
-        $this->mockWayforpayResponse(302, ['location' => 'https://secure.wayforpay.com/page?vkh=abc']);
         $donation = $this->createTestDonation();
 
         $result = $this->gateway->createPayment($donation, []);
 
         $this->assertInstanceOf(RedirectOffsite::class, $result);
-        $this->assertSame('https://secure.wayforpay.com/page?vkh=abc', $result->redirectUrl);
+        parse_str((string) wp_parse_url($result->redirectUrl, PHP_URL_QUERY), $query);
+        $this->assertSame('handlePaymentRedirect', $query['give-gateway-method']);
+        $this->assertSame((string) $donation->id, $query['give-route-signature-id']);
+        $this->assertNotEmpty($query['give-route-signature']);
     }
 
-    public function testNonRedirectResponseLogsDiagnosticHeaders(): void
+    public function testCreatePaymentFailsOnDonationFormWhenCampaignMissing(): void
     {
-        // What Cloudflare in front of Wayforpay returns when it rate limits or challenges the request.
-        $this->mockWayforpayResponse(
-            429,
-            [
-                'server' => 'cloudflare',
-                'content-type' => 'text/html; charset=UTF-8',
-                'cf-ray' => 'a45691823c500215-ZRH',
-                'cf-mitigated' => 'challenge',
-                'retry-after' => '60',
-                'set-cookie' => 'PHPSESSID=donor-session',
-            ],
-            '<!DOCTYPE html><html lang="en-US"><head><title>Just a moment...</title>'
-                . '<script>' . str_repeat('x', 5000) . '</script></head><body>Enable JavaScript and cookies to continue</body></html>'
-        );
-        $donation = $this->createTestDonation();
+        $donation = $this->createTestDonation(['campaignId' => 999999]);
 
-        try {
-            $this->gateway->createPayment($donation, []);
-            $this->fail('Expected PaymentGatewayException');
-        } catch (PaymentGatewayException $e) {
-            // Expected.
-        }
-
-        $notes = $this->getNotesContent($donation);
-        $this->assertStringContainsString('Expected Wayforpay to redirect but got HTTP 429', $notes);
-        $this->assertStringContainsString('"cf-ray":"a45691823c500215-ZRH"', $notes);
-        $this->assertStringContainsString('"cf-mitigated":"challenge"', $notes);
-        $this->assertStringContainsString('"retry-after":"60"', $notes);
-        $this->assertStringContainsString('"server":"cloudflare"', $notes);
-        // The page is reduced to a short plain-text excerpt; scripts and cookies stay out of the note.
-        $this->assertStringContainsString('Just a moment...', $notes);
-        $this->assertStringNotContainsString('<script>', $notes);
-        $this->assertStringNotContainsString('xxxxx', $notes);
-        $this->assertStringNotContainsString('donor-session', $notes);
+        $this->expectException(PaymentGatewayException::class);
+        $this->gateway->createPayment($donation, []);
     }
 
-    public function testRedirectWithoutLocationLogsHeadersInsteadOfCrashing(): void
+    public function testPaymentPagePostsSignedFormToWayforpay(): void
     {
-        $this->mockWayforpayResponse(302, ['server' => 'cloudflare', 'cf-ray' => 'a45691823c500215-ZRH']);
         $donation = $this->createTestDonation();
 
-        try {
-            $this->gateway->createPayment($donation, []);
-            $this->fail('Expected PaymentGatewayException');
-        } catch (PaymentGatewayException $e) {
-            // Expected.
-        }
+        [$response, $html] = $this->callPaymentRedirect($donation);
 
-        $notes = $this->getNotesContent($donation);
-        $this->assertStringContainsString('Wayforpay did not provide a Location in headers', $notes);
-        $this->assertStringContainsString('"cf-ray":"a45691823c500215-ZRH"', $notes);
+        $this->assertNull($response);
+        $this->assertStringContainsString('action="https://secure.wayforpay.com/pay"', $html);
+        $this->assertStringContainsString('document.forms[0].submit()', $html);
+        $this->assertStringContainsString('<base target="_top">', $html);
+        $fields = $this->getPostedFields($html);
+        $this->assertSame(self::TEST_MERCHANT_ACCOUNT, $fields['merchantAccount']);
+        $this->assertStringStartsWith($donation->id . '-', $fields['orderReference']);
+        $this->assertSame(['Test Campaign'], $fields['productName']);
+        $this->assertSame($this->expectedSignature($fields), $fields['merchantSignature']);
+        $this->assertStringContainsString('Redirecting donor to Wayforpay', $this->getNotesContent($donation));
+    }
+
+    public function testPaymentPageSignatureSurvivesHtmlEntitiesInValues(): void
+    {
+        $donation = $this->createTestDonation();
+        $campaign = $donation->campaign()->get();
+        $campaign->title = 'Food &amp; "Water"';
+        $campaign->save();
+
+        [, $html] = $this->callPaymentRedirect($donation);
+
+        $fields = $this->getPostedFields($html);
+        $this->assertSame(['Food &amp; "Water"'], $fields['productName']);
+        $this->assertSame($this->expectedSignature($fields), $fields['merchantSignature']);
+    }
+
+    public function testPaymentPageUsesSignedDonationIdNotQueryArgs(): void
+    {
+        $donation = $this->createTestDonation();
+        $other = $this->createTestDonation();
+
+        [, $html] = $this->callPaymentRedirect($donation, ['donation-id' => $other->id]);
+
+        $this->assertStringStartsWith($donation->id . '-', $this->getPostedFields($html)['orderReference']);
+    }
+
+    public function testPaymentPageSendsCompletedDonationToSuccessPage(): void
+    {
+        $donation = $this->createTestDonation(['status' => DonationStatus::COMPLETE()]);
+
+        [$response, $html] = $this->callPaymentRedirect($donation);
+
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertSame(give_get_success_page_uri(), $response->getTargetUrl());
+        $this->assertSame('', $html);
+    }
+
+    public function testPaymentPageIncludesRecurringPaymentForSubscription(): void
+    {
+        $donation = $this->createTestDonation();
+        $subscription = Subscription::create([
+            'donationFormId' => $donation->formId,
+            'campaignId' => $donation->campaignId,
+            'period' => SubscriptionPeriod::MONTH(),
+            'frequency' => 1,
+            'donorId' => $donation->donorId,
+            'installments' => 0,
+            'amount' => $donation->amount,
+            'status' => SubscriptionStatus::PENDING(),
+            'mode' => SubscriptionMode::TEST(),
+            'gatewayId' => 'wayforpay-gateway',
+        ]);
+        $donation->type = DonationType::SUBSCRIPTION();
+        $donation->subscriptionId = $subscription->id;
+        $donation->save();
+
+        [, $html] = $this->callPaymentRedirect($donation);
+
+        $fields = $this->getPostedFields($html);
+        $this->assertSame('monthly', $fields['regularMode']);
+        $this->assertStringContainsString('subscription-id=' . $subscription->id, $fields['serviceUrl']);
+        $this->assertStringContainsString('(recurring)', $this->getNotesContent($donation));
     }
 }
