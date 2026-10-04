@@ -23,6 +23,7 @@ use WayForPay\SDK\Domain\Regular;
 use WayForPay\SDK\Domain\Reason;
 use WayForPay\SDK\Domain\TransactionService;
 use WayForPay\SDK\Client\CurlRequestTransformer;
+use WayForPay\SDK\Form\PurchaseForm;
 use WayForPay\SDK\Handler\ServiceUrlHandler;
 use WayForPay\SDK\Response\ServiceResponse;
 use WayForPay\SDK\Wizard\PurchaseWizard;
@@ -36,11 +37,12 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	);
 
 	/**
-	 * Note: secureRouteMethods cannot yet be used. Wayforpay allows max 256 chars for returnUrl/serviceUrl.
-	 * The addition of additional signature params in the URLs surpasses these 256 chars.
-	 * It is likely that a feature request to Wayforpay will be needed.
+	 * Note: returnUrl/serviceUrl cannot be secure routes. Wayforpay allows max 256 chars for them,
+	 * and the signature params push the URLs past that.
 	 */
-	public $secureRouteMethods = array();
+	public $secureRouteMethods = array(
+		'handlePaymentRedirect',
+	);
 
 	#[\Override]
 	public static function id(): string {
@@ -94,19 +96,114 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 	#[\Override]
 	public function createPayment( Donation $donation, $gatewayData ): RedirectOffsite {
-		$serviceUrlParams = array( 'donation-id' => $donation->id );
-		return $this->redirectToWayforpay( $donation, $serviceUrlParams );
+		return $this->redirectToWayforpay( $donation );
 	}
 
 	/**
-	 * Redirects donor to an offsite Wayforpay payment page.
+	 * Sends the donor to handlePaymentRedirect(), which posts the payment form to Wayforpay from their browser.
+	 *
+	 * Posting from the browser rather than this server keeps Wayforpay's rate limits per donor, not per site.
 	 */
-	public function redirectToWayforpay(
-		Donation $donation,
-		array $serviceUrlParams = array(),
-		?Regular $recurringPayment = null
-	): RedirectOffsite {
+	private function redirectToWayforpay( Donation $donation, ?Subscription $subscription = null ): RedirectOffsite {
+		// Build the form once here so configuration errors are shown on the donation form.
+		$this->buildPaymentForm( $donation, $subscription );
+
+		return new RedirectOffsite( $this->generateSecureGatewayRouteUrl( 'handlePaymentRedirect', $donation->id ) );
+	}
+
+	/**
+	 * Renders a page that posts the signed payment form to Wayforpay.
+	 *
+	 * @return RedirectResponse|null Null once the page is rendered.
+	 */
+	protected function handlePaymentRedirect( array $queryParams ): ?RedirectResponse {
+		// Read the donation ID from the signed param: GiveWP only signs the other query args since 4.16.8.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$donationId = isset( $_GET['give-route-signature-id'] ) ? absint( $_GET['give-route-signature-id'] ) : 0;
+		$donation   = Donation::find( $donationId );
+		if ( empty( $donation ) || $donation->gatewayId !== self::id() ) {
+			throw new PaymentGatewayException( 'unknown donation' );
+		}
+
+		// The donor can come back here after paying, e.g. with the back button. Don't start a second payment.
+		if ( ! $donation->status->isPending() ) {
+			return new RedirectResponse(
+				$donation->status->isComplete() ? give_get_success_page_uri() : give_get_failed_transaction_uri()
+			);
+		}
+
+		$subscription = $donation->subscription()->get();
+		try {
+			$form = $this->buildPaymentForm( $donation, $subscription );
+		} catch ( PaymentGatewayException $e ) {
+			DonationNote::create(
+				array(
+					'donationId' => $donation->id,
+					'content'    => sprintf( 'Payment failed: could not build the Wayforpay payment form: %s.', $e->getMessage() ),
+				)
+			);
+			return new RedirectResponse( give_get_failed_transaction_uri() );
+		}
+
+		$data = $form->getData();
+		DonationNote::create(
+			array(
+				'donationId' => $donation->id,
+				'content'    => sprintf(
+					'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s%s',
+					$data['orderReference'],
+					$data['amount'],
+					$data['currency'],
+					$subscription ? ' (recurring)' : ''
+				),
+			)
+		);
+
+		$this->renderPaymentRedirectPage( $form );
+		return null;
+	}
+
+	/**
+	 * Outputs a page that auto-submits the payment form, with a button as a fallback.
+	 *
+	 * The form targets the top window: legacy form templates (e.g. Sequoia) load this page in the form's iframe.
+	 */
+	private function renderPaymentRedirectPage( PurchaseForm $form ): void {
+		nocache_headers();
+		?>
+<!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<base target="_top">
+<title><?php esc_html_e( 'Redirecting to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?></title>
+</head>
+<body>
+<p><?php esc_html_e( 'Redirecting you to WayForPay to complete your donation.', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?></p>
+		<?php
+		// Escaped by the SDK with htmlspecialchars(). Not esc_attr(): it leaves "&amp;" as is, which the
+		// browser would post as "&" and fail the signature check.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo $form->getAsString( esc_attr__( 'Continue to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ), '' );
+		wp_print_inline_script_tag( 'document.forms[0].submit();' );
+		?>
+</body>
+</html>
+		<?php
+	}
+
+	/**
+	 * Builds the signed Wayforpay payment form for a donation.
+	 */
+	private function buildPaymentForm( Donation $donation, ?Subscription $subscription ): PurchaseForm {
 		$creds = WayforpaySettings::getCredentials();
+
+		$serviceUrlParams = array( 'donation-id' => $donation->id );
+		if ( $subscription ) {
+			$serviceUrlParams['subscription-id'] = $subscription->id;
+		}
 
 		$returnUrl      = $this->generateGatewayRouteUrl(
 			'handleReturnUrl',
@@ -116,6 +213,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		$amount         = $donation->amount->formatToDecimal();
 		$currency       = strtoupper( $donation->amount->getCurrency()->getCode() );
 		$orderReference = $donation->id . '-' . time();
+		$regular        = $subscription ? $this->buildRegular( $donation, $subscription ) : null;
 
 		$campaign      = $donation->campaign()->get();
 		$campaignTitle = $campaign?->title ?? null;
@@ -154,90 +252,11 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				->setServiceUrl( $serviceUrl )
 				->setLanguage( substr( get_bloginfo( 'language' ), 0, 2 ) )
 				->setMerchantTransactionSecureType( 'AUTO' ); // Default as per previous code
-			if ( $recurringPayment ) {
-				$wizard->setRegular( $recurringPayment );
+			if ( $regular ) {
+				$wizard->setRegular( $regular );
 			}
 
-			// Note: we do not use the standard Wayforpay SDK for sending the request. We want to control the redirect on the server side.
-			$form          = $wizard->getForm();
-			$wayforpayArgs = array_filter( $form->getData() ); // array_filter to exclude unset values from URL params.
-
-			DonationNote::create(
-				array(
-					'donationId' => $donation->id,
-					'content'    => sprintf(
-						'Redirecting donor to Wayforpay. Order: %s, Amount: %s %s%s',
-						$wayforpayArgs['orderReference'],
-						$wayforpayArgs['amount'],
-						$wayforpayArgs['currency'],
-						$recurringPayment ? ' (recurring)' : ''
-					),
-				)
-			);
-
-			$wayforpayRequest = array(
-				'timeout'     => 10,
-				'headers'     => array(
-					'Content-Type' => 'application/x-www-form-urlencoded; charset=utf-8',
-				),
-				// Uses form encoding for the arguments within the body.
-				'body'        => http_build_query( $wayforpayArgs ),
-				// The server should not redirect to Wayforpay's provided redirect URL.
-				// Instead, the server will pass the redirect location to the browser.
-				'redirection' => 0,
-			);
-			$wayforpayResponse = wp_remote_post( $form->getEndpoint()->getUrl(), $wayforpayRequest );
-
-			if ( is_wp_error( $wayforpayResponse ) ) {
-				DonationNote::create(
-					array(
-						'donationId' => $donation->id,
-						'content'    => sprintf(
-							'Payment failed: Could not connect to Wayforpay. Error: %s',
-							$wayforpayResponse->get_error_message()
-						),
-					)
-				);
-				throw new PaymentGatewayException( 'could not connect to Wayforpay' );
-			}
-
-			$responseBody    = wp_remote_retrieve_body( $wayforpayResponse );
-			$responseHeaders = wp_remote_retrieve_headers( $wayforpayResponse );
-
-			$httpCode      = (int) wp_remote_retrieve_response_code( $wayforpayResponse );
-			$redirectCodes = array( 301, 302, 303, 307, 308 );
-			if ( ! in_array( $httpCode, $redirectCodes, true ) ) {
-				DonationNote::create(
-					array(
-						'donationId' => $donation->id,
-						'content'    => sprintf(
-							'Payment failed: Expected Wayforpay to redirect but got HTTP %d. Response: %s',
-							$httpCode,
-							$responseBody
-						),
-					)
-				);
-				throw new PaymentGatewayException( 'no redirect HTTP code provided' );
-			}
-
-			$wayforPayRedirect = $responseHeaders['Location'];
-			if ( empty( $wayforPayRedirect ) ) {
-				DonationNote::create(
-					array(
-						'donationId' => $donation->id,
-						'content'    => sprintf( 'Payment failed: Wayforpay did not provide a Location in headers: %s', $responseHeaders ),
-					)
-				);
-				throw new PaymentGatewayException( 'no redirect URL provided' );
-			}
-
-			DonationNote::create(
-				array(
-					'donationId' => $donation->id,
-					'content'    => sprintf( 'Sending user to payment URL: %s', $wayforPayRedirect ),
-				)
-			);
-			return new RedirectOffsite( $wayforPayRedirect );
+			return $wizard->getForm();
 		} catch ( \Exception $e ) {
 			DonationNote::create(
 				array(
@@ -614,6 +633,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		Subscription $subscription,
 		$gatewayData
 	): RedirectOffsite {
+		return $this->redirectToWayforpay( $donation, $subscription );
+	}
+
+	/**
+	 * Builds the Wayforpay recurring payment for a subscription.
+	 */
+	private function buildRegular( Donation $donation, Subscription $subscription ): Regular {
 		$periodMap   = array( // GiveWP subscription periods => Wayforpay regular modes.
 			'day'     => Regular::MODE_DAYLY,
 			'week'    => Regular::MODE_WEEKLY,
@@ -632,8 +658,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		// Indefinite subscription; Wayforpay doesn't have an explicit indefinite mode, so use a far in the future date.
 		$dateEnd = $subscription->installments === 0 ? new \DateTime( '+100 years' ) : null;
 		// Fixed installments; subtract one payment because the initial payment is made too.
-		$count            = $subscription->installments > 0 ? $subscription->installments - 1 : null;
-		$recurringPayment = new Regular(
+		$count = $subscription->installments > 0 ? $subscription->installments - 1 : null;
+		return new Regular(
 			modes: array( $regularMode ),
 			amount: $amount,
 			dateNext: $dateNext,
@@ -641,16 +667,6 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			count: $count,
 			on: true,
 			behavior: Regular::BEHAVIOR_PRESET
-		);
-
-		$serviceUrlParams = array(
-			'donation-id'     => $donation->id,
-			'subscription-id' => $subscription->id,
-		);
-		return $this->redirectToWayforpay(
-			$donation,
-			$serviceUrlParams,
-			$recurringPayment
 		);
 	}
 
