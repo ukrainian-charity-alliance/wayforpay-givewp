@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-04
+
 ### Fixed
 
 - Donations failing with HTTP 429 from WayForPay on busy sites. The redirect
