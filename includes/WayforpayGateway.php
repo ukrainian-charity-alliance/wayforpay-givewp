@@ -211,9 +211,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 					array(
 						'donationId' => $donation->id,
 						'content'    => sprintf(
-							'Payment failed: Expected Wayforpay to redirect but got HTTP %d. Response: %s',
+							'Payment failed: Expected Wayforpay to redirect but got HTTP %d. Headers: %s. Response: %s',
 							$httpCode,
-							$responseBody
+							$this->loggableResponseHeaders( $responseHeaders ),
+							wp_html_excerpt( $responseBody, 500, '...' )
 						),
 					)
 				);
@@ -225,7 +226,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				DonationNote::create(
 					array(
 						'donationId' => $donation->id,
-						'content'    => sprintf( 'Payment failed: Wayforpay did not provide a Location in headers: %s', $responseHeaders ),
+						'content'    => sprintf(
+							'Payment failed: Wayforpay did not provide a Location in headers: %s',
+							$this->loggableResponseHeaders( $responseHeaders )
+						),
 					)
 				);
 				throw new PaymentGatewayException( 'no redirect URL provided' );
@@ -870,6 +874,22 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				)
 			)
 		);
+
+		return wp_json_encode( $loggable );
+	}
+
+	/**
+	 * Response headers worth logging, e.g. to diagnose Cloudflare challenges or rate limits.
+	 *
+	 * @param \ArrayAccess|array $headers Headers from wp_remote_retrieve_headers().
+	 */
+	private function loggableResponseHeaders( \ArrayAccess|array $headers ): string {
+		$loggable = array();
+		foreach ( array( 'server', 'content-type', 'cf-ray', 'cf-mitigated', 'retry-after' ) as $name ) {
+			if ( ! empty( $headers[ $name ] ) ) {
+				$loggable[ $name ] = $headers[ $name ];
+			}
+		}
 
 		return wp_json_encode( $loggable );
 	}

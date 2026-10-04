@@ -12,6 +12,15 @@ changelog by hand.
 
 ## [Unreleased]
 
+### Changed
+
+- Failed redirects to WayForPay now log response headers and a short excerpt
+  of the response.
+
+### Fixed
+
+- Crash when WayForPay redirects without a `Location` header.
+
 ## [1.1.1] - 2026-09-09
 
 ### Fixed
