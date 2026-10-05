@@ -183,15 +183,34 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 <body>
 <p><?php esc_html_e( 'Redirecting you to WayForPay to complete your donation.', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?></p>
 		<?php
-		// Escaped by the SDK with htmlspecialchars(). Not esc_attr(): it leaves "&amp;" as is, which the
-		// browser would post as "&" and fail the signature check.
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		echo $form->getAsString( esc_attr__( 'Continue to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ), '' );
-		wp_print_inline_script_tag( 'document.forms[0].submit();' );
+		// Field values use esc_textarea(), not esc_attr(): esc_attr() leaves "&amp;" as is, which the browser
+		// would post as "&" and fail the signature check.
 		?>
+<form method="post" action="<?php echo esc_url( $form->getEndpoint()->getUrl() ); ?>" accept-charset="utf-8">
+		<?php foreach ( $this->paymentFormFields( $form ) as list( $name, $value ) ) : ?>
+<input type="hidden" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_textarea( $value ); ?>">
+		<?php endforeach; ?>
+<input type="submit" value="<?php esc_attr_e( 'Continue to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?>">
+</form>
+		<?php wp_print_inline_script_tag( 'document.forms[0].submit();' ); ?>
 </body>
 </html>
 		<?php
+	}
+
+	/**
+	 * The payment form's fields as [name, value] pairs, matching the SDK's PurchaseForm::getAsString().
+	 *
+	 * @return array<array{0: string, 1: string}>
+	 */
+	private function paymentFormFields( PurchaseForm $form ): array {
+		$fields = array();
+		foreach ( array_filter( $form->getData() ) as $name => $value ) {
+			foreach ( (array) $value as $item ) {
+				$fields[] = array( is_array( $value ) ? $name . '[]' : $name, (string) $item );
+			}
+		}
+		return $fields;
 	}
 
 	/**
@@ -455,19 +474,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		$orderReference  = $transaction->getOrderReference();
 		$status          = $transaction->getStatus();
 		$sendAckResponse = function () use ( $handler, $transaction ) {
-			// send ack receipt to Wayforpay.
-			if ( ! headers_sent() ) {
-				header( 'Content-Type: application/json; charset=utf-8' );
-			}
-			// Not escaped by design: this is a machine-readable JSON body built and encoded by the SDK
-			// (json_encode of an array it assembles), consumed by Wayforpay's retry logic rather than
-			// rendered in a browser. HTML escaping it would corrupt the signature it carries.
-			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			echo $handler->getSuccessResponse( $transaction );
-			if ( class_exists( '\WPDieException' ) ) { // For unit testing.
-				throw new \WPDieException( '', 200 );
-			}
-			exit;
+			// Send the signed ack to Wayforpay. Re-encoding is safe: the signature covers its values, not its JSON.
+			wp_send_json( json_decode( $handler->getSuccessResponse( $transaction ), true ) );
 		};
 
 		// Handle subscription renewal webhooks.

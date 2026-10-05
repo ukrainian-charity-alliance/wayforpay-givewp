@@ -22,6 +22,7 @@ changelog by hand.
 ### Security
 
 - Return URL requests must carry the donation's token.
+- Escape the payment form at output; send the webhook reply via `wp_send_json()`.
 
 ## [1.1.1] - 2026-09-09
 

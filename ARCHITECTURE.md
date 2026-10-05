@@ -65,7 +65,7 @@ card details on the WordPress site.
      `COMPLETE` / `FAILED` based on the transaction status; stores
      `gatewayTransactionId = orderReference`.
    - Always replies with `$handler->getSuccessResponse($transaction)` (the signed
-     ack) so Wayforpay stops retrying.
+     ack), sent via `wp_send_json()`, so Wayforpay stops retrying.
 
 ### Why returnUrl and serviceUrl are non-secure routes
 
@@ -139,9 +139,10 @@ The suite runs PHPUnit against a real WordPress test install with GiveWP, backed
 a Dockerized MySQL database. See the [README](README.md) for how to run it. Tests
 live in [tests/Unit/](tests/Unit/).
 
-One architectural detail worth knowing: `webhookNotificationsListener` throws
-`\WPDieException` (instead of calling `exit`) when that class exists, so the signed
-acknowledgment path can be asserted in tests.
+One detail worth knowing: `webhookNotificationsListener` replies with
+`wp_send_json()`, which exits outside AJAX. Its tests make `wp_doing_ajax` true so
+it ends in `wp_die()` instead, which the suite turns into a catchable
+`\WPDieException`; that is how the signed acknowledgment is asserted.
 
 `composer plugin-check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
 the WordPress.org review tooling, against the built plugin tree inside a throwaway
