@@ -176,6 +176,34 @@ class RedirectToWayforpayTest extends TestCase
         $this->assertStringContainsString('User cancelled on Wayforpay', $this->getNotesContent($donation));
     }
 
+    /**
+     * @dataProvider languageProvider
+     */
+    public function testPaymentPageSendsLanguageWayforpayKnows(string $locale, string $expected): void
+    {
+        // Wayforpay's result page renders blank for a code it doesn't know, stranding donors who cancel.
+        $donation = $this->createTestDonation();
+        $setLocale = static fn () => $locale;
+        add_filter('pre_determine_locale', $setLocale);
+
+        try {
+            [, $html] = $this->callPaymentRedirect($donation);
+        } finally {
+            remove_filter('pre_determine_locale', $setLocale);
+        }
+
+        $this->assertSame($expected, $this->getPostedFields($html)['language']);
+    }
+
+    public function languageProvider(): array
+    {
+        return [
+            'Ukrainian' => ['uk', 'UA'],
+            'English' => ['en_US', 'EN'],
+            'unsupported' => ['ja', 'AUTO'],
+        ];
+    }
+
     public function testPaymentPageUsesSignedDonationIdNotQueryArgs(): void
     {
         $donation = $this->createTestDonation();
