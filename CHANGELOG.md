@@ -12,6 +12,8 @@ changelog by hand.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-05
+
 ## [1.2.0] - 2026-10-04
 
 ### Fixed
