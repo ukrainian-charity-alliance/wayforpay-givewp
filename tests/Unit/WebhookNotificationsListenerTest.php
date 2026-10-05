@@ -32,6 +32,10 @@ class WebhookNotificationsListenerTest extends TestCase
         parent::setUp();
         $this->gateway = $this->createGateway();
         $_GET = [];
+
+        // Outside AJAX, wp_send_json() exits; during AJAX it ends in wp_die(), which throws \WPDieException here.
+        add_filter('wp_doing_ajax', '__return_true');
+        add_filter('wp_die_ajax_handler', [$this, 'get_wp_die_handler']);
     }
 
     public function tearDown(): void

@@ -183,15 +183,34 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 <body>
 <p><?php esc_html_e( 'Redirecting you to WayForPay to complete your donation.', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?></p>
 		<?php
-		// Escaped by the SDK with htmlspecialchars(). Not esc_attr(): it leaves "&amp;" as is, which the
-		// browser would post as "&" and fail the signature check.
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		echo $form->getAsString( esc_attr__( 'Continue to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ), '' );
-		wp_print_inline_script_tag( 'document.forms[0].submit();' );
+		// Field values use esc_textarea(), not esc_attr(): esc_attr() leaves "&amp;" as is, which the browser
+		// would post as "&" and fail the signature check.
 		?>
+<form method="post" action="<?php echo esc_url( $form->getEndpoint()->getUrl() ); ?>" accept-charset="utf-8">
+		<?php foreach ( $this->paymentFormFields( $form ) as list( $name, $value ) ) : ?>
+<input type="hidden" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_textarea( $value ); ?>">
+		<?php endforeach; ?>
+<input type="submit" value="<?php esc_attr_e( 'Continue to WayForPay', 'uca-payment-gateway-with-wayforpay-for-givewp' ); ?>">
+</form>
+		<?php wp_print_inline_script_tag( 'document.forms[0].submit();' ); ?>
 </body>
 </html>
 		<?php
+	}
+
+	/**
+	 * The payment form's fields as [name, value] pairs, matching the SDK's PurchaseForm::getAsString().
+	 *
+	 * @return array<array{0: string, 1: string}>
+	 */
+	private function paymentFormFields( PurchaseForm $form ): array {
+		$fields = array();
+		foreach ( array_filter( $form->getData() ) as $name => $value ) {
+			foreach ( (array) $value as $item ) {
+				$fields[] = array( is_array( $value ) ? $name . '[]' : $name, (string) $item );
+			}
+		}
+		return $fields;
 	}
 
 	/**
@@ -207,7 +226,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 		$returnUrl      = $this->generateGatewayRouteUrl(
 			'handleReturnUrl',
-			array( 'donation-id' => $donation->id )
+			array(
+				'donation-id' => $donation->id,
+				'token'       => $this->returnToken( $donation->id ),
+			)
 		);
 		$serviceUrl     = $this->webhook->getNotificationUrl( $serviceUrlParams );
 		$amount         = $donation->amount->formatToDecimal();
@@ -275,19 +297,22 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	protected function handleReturnUrl( array $queryParams ): RedirectResponse {
 		$creds = WayforpaySettings::getCredentials();
 
-		// WayForPay may POST transaction data here, but we don't rely on it for status updates.
-		// The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
-		//
-		// There is no nonce to verify: this route is the browser's return leg from Wayforpay's hosted
-		// payment page, so the request originates from a third party and never from a WordPress session.
-		// The route performs no state changes for that reason — it only decides which page the donor sees.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$data = $this->sanitizeCallbackData( stripslashes_deep( $_POST ) );
-
 		$donationId = isset( $queryParams['donation-id'] ) ? (int) $queryParams['donation-id'] : null;
 		if ( empty( $donationId ) ) {
 			throw new PaymentGatewayException( 'no donation-id parameter received from Wayforpay' );
 		}
+
+		// The token stands in for a nonce, which can't work here: Wayforpay posts this cross-site, so the
+		// browser drops the donor's login cookie. Checked before reading input, so a guessed donation-id fails.
+		$token = isset( $queryParams['token'] ) && is_string( $queryParams['token'] ) ? $queryParams['token'] : '';
+		if ( ! hash_equals( $this->returnToken( $donationId ), $token ) ) {
+			throw new PaymentGatewayException( 'invalid return token received from Wayforpay' );
+		}
+
+		// WayForPay may POST transaction data here, but we don't rely on it for status updates.
+		// The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Origin checked by the return token above.
+		$data = $this->sanitizeCallbackData( stripslashes_deep( $_POST ) );
 
 		if ( empty( $data ) ) {
 			throw new PaymentGatewayException( 'no data received from Wayforpay' );
@@ -320,8 +345,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			);
 		}
 
-		// If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
-		// If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
+		// Verify Wayforpay's signature when the payload has one. Either way, only the webhook changes donation status.
 		if ( ! empty( $data['merchantSignature'] ) ) {
 			try {
 				$handler  = new ServiceUrlHandler( $creds );
@@ -450,19 +474,8 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 		$orderReference  = $transaction->getOrderReference();
 		$status          = $transaction->getStatus();
 		$sendAckResponse = function () use ( $handler, $transaction ) {
-			// send ack receipt to Wayforpay.
-			if ( ! headers_sent() ) {
-				header( 'Content-Type: application/json; charset=utf-8' );
-			}
-			// Not escaped by design: this is a machine-readable JSON body built and encoded by the SDK
-			// (json_encode of an array it assembles), consumed by Wayforpay's retry logic rather than
-			// rendered in a browser. HTML escaping it would corrupt the signature it carries.
-			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			echo $handler->getSuccessResponse( $transaction );
-			if ( class_exists( '\WPDieException' ) ) { // For unit testing.
-				throw new \WPDieException( '', 200 );
-			}
-			exit;
+			// Send the signed ack to Wayforpay. Re-encoding is safe: the signature covers its values, not its JSON.
+			wp_send_json( json_decode( $handler->getSuccessResponse( $transaction ), true ) );
 		};
 
 		// Handle subscription renewal webhooks.
@@ -794,6 +807,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				)
 			);
 		}
+	}
+
+	/**
+	 * Per-donation token for the returnUrl. Short, since Wayforpay caps the URL at 256 chars.
+	 */
+	private function returnToken( int $donationId ): string {
+		return substr( wp_hash( 'wayforpay-return|' . $donationId ), 0, 16 );
 	}
 
 	/**

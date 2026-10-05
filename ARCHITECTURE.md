@@ -52,9 +52,9 @@ card details on the WordPress site.
 
 2. **Return URL** (`handleReturnUrl`) — where Wayforpay sends the donor's browser
    back. **UX only.** It decides which page to show (success / failure /
-   "payment cancelled") but does **not** update donation status. If a
-   `merchantSignature` is present it is verified via `ServiceUrlHandler`; otherwise
-   a plain `ServiceResponse` is parsed.
+   "payment cancelled") but does **not** update donation status. It first checks
+   the return token (see below). If a `merchantSignature` is present it is
+   verified via `ServiceUrlHandler`; otherwise a plain `ServiceResponse` is parsed.
 
 3. **Service URL webhook** (`webhookNotificationsListener`) — the **authoritative**
    source of truth for payment status. Wayforpay POSTs here server-to-server and
@@ -65,7 +65,7 @@ card details on the WordPress site.
      `COMPLETE` / `FAILED` based on the transaction status; stores
      `gatewayTransactionId = orderReference`.
    - Always replies with `$handler->getSuccessResponse($transaction)` (the signed
-     ack) so Wayforpay stops retrying.
+     ack), sent via `wp_send_json()`, so Wayforpay stops retrying.
 
 ### Why returnUrl and serviceUrl are non-secure routes
 
@@ -73,6 +73,12 @@ Wayforpay limits `returnUrl`/`serviceUrl` to 256 chars, and GiveWP's secure-rout
 signature params push the URLs past that limit. So these are registered as plain
 `routeMethods`. This is safe because status changes only happen in the webhook,
 which independently verifies Wayforpay's own signature.
+
+The returnUrl carries a short per-donation `token` (`returnToken()`, an HMAC of
+the donation ID), checked before any POST data is read. Without it, a guessed
+`donation-id` could write notes to any Wayforpay donation. A WordPress nonce can't
+do this job: Wayforpay posts the return cross-site, so the browser doesn't send
+the donor's login cookie and a nonce created for a logged-in donor would fail.
 
 `handlePaymentRedirect` is never sent to Wayforpay, so it is a secure route. It
 reads the donation from the signed `give-route-signature-id`, because GiveWP
@@ -133,9 +139,10 @@ The suite runs PHPUnit against a real WordPress test install with GiveWP, backed
 a Dockerized MySQL database. See the [README](README.md) for how to run it. Tests
 live in [tests/Unit/](tests/Unit/).
 
-One architectural detail worth knowing: `webhookNotificationsListener` throws
-`\WPDieException` (instead of calling `exit`) when that class exists, so the signed
-acknowledgment path can be asserted in tests.
+One detail worth knowing: `webhookNotificationsListener` replies with
+`wp_send_json()`, which exits outside AJAX. Its tests make `wp_doing_ajax` true so
+it ends in `wp_die()` instead, which the suite turns into a catchable
+`\WPDieException`; that is how the signed acknowledgment is asserted.
 
 `composer plugin-check` runs [Plugin Check](https://wordpress.org/plugins/plugin-check/),
 the WordPress.org review tooling, against the built plugin tree inside a throwaway

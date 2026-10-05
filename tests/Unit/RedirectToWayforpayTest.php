@@ -157,6 +157,25 @@ class RedirectToWayforpayTest extends TestCase
         $this->assertSame($this->expectedSignature($fields), $fields['merchantSignature']);
     }
 
+    public function testPaymentPageReturnUrlIsAcceptedOnReturn(): void
+    {
+        $donation = $this->createTestDonation();
+
+        [, $html] = $this->callPaymentRedirect($donation);
+
+        $returnUrl = $this->getPostedFields($html)['returnUrl'];
+        $this->assertLessThanOrEqual(256, strlen($returnUrl), 'Wayforpay caps returnUrl at 256 chars');
+        parse_str((string) wp_parse_url($returnUrl, PHP_URL_QUERY), $query);
+        $this->assertNotEmpty($query['token']);
+
+        // A cancelled payment comes back unsigned; the token alone gets it through.
+        $_POST = ['orderReference' => 'test'];
+        $response = $this->gateway->callRouteMethod('handleReturnUrl', $query);
+
+        $this->assertStringStartsWith(give_get_failed_transaction_uri(), $response->getTargetUrl());
+        $this->assertStringContainsString('User cancelled on Wayforpay', $this->getNotesContent($donation));
+    }
+
     public function testPaymentPageUsesSignedDonationIdNotQueryArgs(): void
     {
         $donation = $this->createTestDonation();
