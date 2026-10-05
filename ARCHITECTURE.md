@@ -52,9 +52,9 @@ card details on the WordPress site.
 
 2. **Return URL** (`handleReturnUrl`) — where Wayforpay sends the donor's browser
    back. **UX only.** It decides which page to show (success / failure /
-   "payment cancelled") but does **not** update donation status. If a
-   `merchantSignature` is present it is verified via `ServiceUrlHandler`; otherwise
-   a plain `ServiceResponse` is parsed.
+   "payment cancelled") but does **not** update donation status. It first checks
+   the return token (see below). If a `merchantSignature` is present it is
+   verified via `ServiceUrlHandler`; otherwise a plain `ServiceResponse` is parsed.
 
 3. **Service URL webhook** (`webhookNotificationsListener`) — the **authoritative**
    source of truth for payment status. Wayforpay POSTs here server-to-server and
@@ -73,6 +73,12 @@ Wayforpay limits `returnUrl`/`serviceUrl` to 256 chars, and GiveWP's secure-rout
 signature params push the URLs past that limit. So these are registered as plain
 `routeMethods`. This is safe because status changes only happen in the webhook,
 which independently verifies Wayforpay's own signature.
+
+The returnUrl carries a short per-donation `token` (`returnToken()`, an HMAC of
+the donation ID), checked before any POST data is read. Without it, a guessed
+`donation-id` could write notes to any Wayforpay donation. A WordPress nonce can't
+do this job: Wayforpay posts the return cross-site, so the browser doesn't send
+the donor's login cookie and a nonce created for a logged-in donor would fail.
 
 `handlePaymentRedirect` is never sent to Wayforpay, so it is a secure route. It
 reads the donation from the signed `give-route-signature-id`, because GiveWP

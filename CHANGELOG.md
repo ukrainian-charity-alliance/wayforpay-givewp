@@ -19,6 +19,10 @@ changelog by hand.
 - Donations failing with HTTP 429 from WayForPay on busy sites. The redirect
   is now browser-side instead of server-side.
 
+### Security
+
+- Return URL requests must carry the donation's token.
+
 ## [1.1.1] - 2026-09-09
 
 ### Fixed

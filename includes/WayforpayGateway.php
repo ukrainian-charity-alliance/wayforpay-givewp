@@ -207,7 +207,10 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 
 		$returnUrl      = $this->generateGatewayRouteUrl(
 			'handleReturnUrl',
-			array( 'donation-id' => $donation->id )
+			array(
+				'donation-id' => $donation->id,
+				'token'       => $this->returnToken( $donation->id ),
+			)
 		);
 		$serviceUrl     = $this->webhook->getNotificationUrl( $serviceUrlParams );
 		$amount         = $donation->amount->formatToDecimal();
@@ -275,19 +278,22 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	protected function handleReturnUrl( array $queryParams ): RedirectResponse {
 		$creds = WayforpaySettings::getCredentials();
 
-		// WayForPay may POST transaction data here, but we don't rely on it for status updates.
-		// The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
-		//
-		// There is no nonce to verify: this route is the browser's return leg from Wayforpay's hosted
-		// payment page, so the request originates from a third party and never from a WordPress session.
-		// The route performs no state changes for that reason — it only decides which page the donor sees.
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$data = $this->sanitizeCallbackData( stripslashes_deep( $_POST ) );
-
 		$donationId = isset( $queryParams['donation-id'] ) ? (int) $queryParams['donation-id'] : null;
 		if ( empty( $donationId ) ) {
 			throw new PaymentGatewayException( 'no donation-id parameter received from Wayforpay' );
 		}
+
+		// The token stands in for a nonce, which can't work here: Wayforpay posts this cross-site, so the
+		// browser drops the donor's login cookie. Checked before reading input, so a guessed donation-id fails.
+		$token = isset( $queryParams['token'] ) && is_string( $queryParams['token'] ) ? $queryParams['token'] : '';
+		if ( ! hash_equals( $this->returnToken( $donationId ), $token ) ) {
+			throw new PaymentGatewayException( 'invalid return token received from Wayforpay' );
+		}
+
+		// WayForPay may POST transaction data here, but we don't rely on it for status updates.
+		// The serviceUrl webhook is the authoritative source for updating payment status for GiveWP.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Origin checked by the return token above.
+		$data = $this->sanitizeCallbackData( stripslashes_deep( $_POST ) );
 
 		if ( empty( $data ) ) {
 			throw new PaymentGatewayException( 'no data received from Wayforpay' );
@@ -320,8 +326,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 			);
 		}
 
-		// If the returnUrl is registered in secureRouteMethods, a signature will be sent for verification.
-		// If in routeMethods, it's okay to continue because there are no sensitive operations done via returnUrl.
+		// Verify Wayforpay's signature when the payload has one. Either way, only the webhook changes donation status.
 		if ( ! empty( $data['merchantSignature'] ) ) {
 			try {
 				$handler  = new ServiceUrlHandler( $creds );
@@ -794,6 +799,13 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				)
 			);
 		}
+	}
+
+	/**
+	 * Per-donation token for the returnUrl. Short, since Wayforpay caps the URL at 256 chars.
+	 */
+	private function returnToken( int $donationId ): string {
+		return substr( wp_hash( 'wayforpay-return|' . $donationId ), 0, 16 );
 	}
 
 	/**

@@ -47,7 +47,7 @@ class HandleReturnUrlTest extends TestCase
         $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
         $this->expectExceptionMessage('no data received from Wayforpay');
 
-        $this->invokeHandleReturnUrl(['donation-id' => 123]);
+        $this->invokeHandleReturnUrl($this->returnParams(123));
     }
 
     public function testPaymentSuccessful(): void
@@ -96,7 +96,7 @@ class HandleReturnUrlTest extends TestCase
             'createdDate' => time(),
             'processingDate' => time(),
         ];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $this->assertEquals(give_get_success_page_uri(), $response->getTargetUrl());
@@ -148,7 +148,7 @@ class HandleReturnUrlTest extends TestCase
             'createdDate' => time(),
             'processingDate' => time(),
         ];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $redirectUrl = $response->getTargetUrl();
@@ -205,7 +205,7 @@ class HandleReturnUrlTest extends TestCase
             'createdDate' => time(),
             'processingDate' => time(),
         ];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $redirectUrl = $response->getTargetUrl();
@@ -262,7 +262,7 @@ class HandleReturnUrlTest extends TestCase
             'createdDate' => time(),
             'processingDate' => time(),
         ];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $redirectUrl = $response->getTargetUrl();
@@ -307,7 +307,7 @@ class HandleReturnUrlTest extends TestCase
         ]);
 
         $_POST = ['orderReference' => 'test'];
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
 
@@ -324,7 +324,7 @@ class HandleReturnUrlTest extends TestCase
         $donation = $this->createTestDonation();
 
         $_POST = $this->buildSignedPost('Approved', Reason::CODE_OK, 'OK');
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertInstanceOf(\Give\Framework\Http\Response\Types\RedirectResponse::class, $response);
         $this->assertEquals(give_get_success_page_uri(), $response->getTargetUrl());
@@ -342,7 +342,7 @@ class HandleReturnUrlTest extends TestCase
         $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
         $this->expectExceptionMessage('invalid signature received from Wayforpay');
 
-        $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $this->invokeHandleReturnUrl($this->returnParams($donation->id));
     }
 
     public function testRejectsDonationBelongingToAnotherGateway(): void
@@ -356,7 +356,7 @@ class HandleReturnUrlTest extends TestCase
         $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
         $this->expectExceptionMessage('unknown donation-id received from Wayforpay');
 
-        $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $this->invokeHandleReturnUrl($this->returnParams($donation->id));
     }
 
     public function testRejectsUnknownDonationId(): void
@@ -366,7 +366,30 @@ class HandleReturnUrlTest extends TestCase
         $this->expectException(\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException::class);
         $this->expectExceptionMessage('unknown donation-id received from Wayforpay');
 
-        $this->invokeHandleReturnUrl(['donation-id' => 999999]);
+        $this->invokeHandleReturnUrl($this->returnParams(999999));
+    }
+
+    public function testRejectsMissingToken(): void
+    {
+        $donation = $this->createTestDonation();
+
+        $this->assertRejectedWithoutNotes($donation, ['donation-id' => $donation->id]);
+    }
+
+    public function testRejectsWrongToken(): void
+    {
+        $donation = $this->createTestDonation();
+
+        $this->assertRejectedWithoutNotes($donation, ['donation-id' => $donation->id, 'token' => 'deadbeefdeadbeef']);
+    }
+
+    public function testRejectsAnotherDonationsToken(): void
+    {
+        // The token is what stops a guessed donation-id, so it must only be valid for its own donation.
+        $donation = $this->createTestDonation();
+        $otherToken = $this->returnParams($donation->id + 1)['token'];
+
+        $this->assertRejectedWithoutNotes($donation, ['donation-id' => $donation->id, 'token' => $otherToken]);
     }
 
     public function testUnexpectedPostFieldsAreDiscardedWithoutBreakingSignature(): void
@@ -380,7 +403,7 @@ class HandleReturnUrlTest extends TestCase
         $data['anotherOne'] = ['nested' => 'array'];
         $_POST = $data;
 
-        $response = $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $response = $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $this->assertEquals(give_get_success_page_uri(), $response->getTargetUrl());
 
@@ -402,7 +425,7 @@ class HandleReturnUrlTest extends TestCase
         $data['phone'] = '380501234567';
         $_POST = $data;
 
-        $this->invokeHandleReturnUrl(['donation-id' => $donation->id]);
+        $this->invokeHandleReturnUrl($this->returnParams($donation->id));
 
         $content = implode("\n", array_map(static fn ($note) => $note->content, $donation->notes()->getAll()));
         $this->assertStringContainsString('orderReference', $content);
@@ -451,6 +474,39 @@ class HandleReturnUrlTest extends TestCase
             'createdDate' => $now,
             'processingDate' => $now,
         ];
+    }
+
+    /**
+     * Assert an unsigned "Approved" return with these query params is refused without touching the donation's notes.
+     */
+    private function assertRejectedWithoutNotes(Donation $donation, array $queryParams): void
+    {
+        $_POST = [
+            'orderReference' => 'test',
+            'transactionStatus' => 'Approved',
+            'reasonCode' => Reason::CODE_OK,
+            'reason' => 'OK',
+        ];
+
+        try {
+            $this->invokeHandleReturnUrl($queryParams);
+            $this->fail('Expected the return to be rejected');
+        } catch (\Give\Framework\PaymentGateways\Exceptions\PaymentGatewayException $e) {
+            $this->assertSame('invalid return token received from Wayforpay', $e->getMessage());
+        }
+
+        $this->assertEmpty($donation->notes()->getAll());
+    }
+
+    /**
+     * The returnUrl query params the gateway gives Wayforpay for a donation.
+     */
+    private function returnParams(int $donationId): array
+    {
+        $method = new \ReflectionMethod($this->gateway, 'returnToken');
+        $method->setAccessible(true);
+
+        return ['donation-id' => $donationId, 'token' => $method->invoke($this->gateway, $donationId)];
     }
 
     /**
