@@ -12,7 +12,11 @@ changelog by hand.
 
 ## [Unreleased]
 
-## [1.3.0] - 2026-10-05
+## [1.3.1] - 2026-10-05
+
+### Fixed
+
+- Donors who cancel on a Ukrainian-language site are no longer stuck on a blank WayForPay page.
 
 ## [1.2.0] - 2026-10-04
 

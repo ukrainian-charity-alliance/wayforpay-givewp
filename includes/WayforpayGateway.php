@@ -272,7 +272,7 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 				->setProducts( new ProductCollection( array( new Product( $campaignTitle, $amount, 1 ) ) ) )
 				->setReturnUrl( $returnUrl )
 				->setServiceUrl( $serviceUrl )
-				->setLanguage( substr( get_bloginfo( 'language' ), 0, 2 ) )
+				->setLanguage( $this->paymentPageLanguage() )
 				->setMerchantTransactionSecureType( 'AUTO' ); // Default as per previous code
 			if ( $regular ) {
 				$wizard->setRegular( $regular );
@@ -814,6 +814,18 @@ class WayforpayGateway extends PaymentGateway implements WebhookNotificationsLis
 	 */
 	private function returnToken( int $donationId ): string {
 		return substr( wp_hash( 'wayforpay-return|' . $donationId ), 0, 16 );
+	}
+
+	/**
+	 * The site language as a Wayforpay code, which calls Ukrainian "UA" where WordPress uses "uk".
+	 */
+	private function paymentPageLanguage(): string {
+		$language = strtolower( substr( get_bloginfo( 'language' ), 0, 2 ) );
+		return match ( $language ) {
+			'uk' => 'UA',
+			'en', 'ru', 'de', 'it', 'ro', 'es', 'pl', 'sk', 'fr', 'lv', 'cs' => strtoupper( $language ),
+			default => 'AUTO',
+		};
 	}
 
 	/**
