@@ -12,6 +12,10 @@ changelog by hand.
 
 ## [Unreleased]
 
+### Added
+
+- Plugin icon for the WordPress.org plugin directory.
+
 ## [1.3.1] - 2026-10-05
 
 ### Fixed
