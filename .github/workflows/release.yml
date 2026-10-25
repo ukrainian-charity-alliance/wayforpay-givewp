@@ -61,5 +61,7 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/deploy-wporg.yml
+    # Without it, the called job's wordpress-org environment secrets resolve empty.
+    secrets: inherit
     with:
       tag: ${{ github.ref_name }}

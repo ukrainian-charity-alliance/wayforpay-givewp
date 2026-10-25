@@ -191,7 +191,9 @@ deploying when the SVN tag already exists, so without preflight a duplicate
 deploy would pass silently.
 
 The SVN credentials are secrets of the `wordpress-org` environment, which only
-`main` and release tags can use. Release Confirmation is on, so a new SVN tag
-waits for a committer's emailed approval before it goes live.
+`main` and release tags can use. `release.yml` must call the deploy with
+`secrets: inherit`: otherwise those environment secrets reach it empty, even
+though the deploy job declares the environment. Release Confirmation is on, so
+a new SVN tag waits for a committer's emailed approval before it goes live.
 
 See the [README](README.md) for the full release process.
