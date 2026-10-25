@@ -173,4 +173,24 @@ defined by [.distignore](.distignore), which is also what `composer plugin-check
 builds from — one exclusion list, so the checked plugin and the shipped plugin
 cannot drift apart.
 
+## Deploying to WordPress.org
+
+[deploy-wporg.yml](.github/workflows/deploy-wporg.yml) deploys a GitHub Release
+to WordPress.org SVN using
+[10up/action-wordpress-plugin-deploy](https://github.com/10up/action-wordpress-plugin-deploy).
+It never rebuilds: it unpacks the Release's zip and passes it as `BUILD_DIR`, so
+WordPress.org gets the same files as GitHub. `.distignore` is applied only once,
+by `composer zip`. Only the preflight script and `.wordpress-org/` (synced to SVN
+`assets/`) come from the checkout.
+
+[scripts/wporg-preflight.sh](scripts/wporg-preflight.sh) runs first. It fails
+unless the zip is stamped with the tag's version, the tag is on `main`, and the
+version is newer than every SVN tag. The deploy action itself exits 0 without
+deploying when the SVN tag already exists, so without preflight a duplicate
+deploy would pass silently.
+
+The SVN credentials are secrets of the `wordpress-org` environment, which only
+`main` and release tags can use. Release Confirmation is on, so a new SVN tag
+waits for a committer's emailed approval before it goes live.
+
 See the [README](README.md) for the full release process.
