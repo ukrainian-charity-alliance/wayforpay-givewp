@@ -178,7 +178,8 @@ cannot drift apart.
 [deploy-wporg.yml](.github/workflows/deploy-wporg.yml) deploys a GitHub Release
 to WordPress.org SVN using
 [10up/action-wordpress-plugin-deploy](https://github.com/10up/action-wordpress-plugin-deploy).
-It never rebuilds: it unpacks the Release's zip and passes it as `BUILD_DIR`, so
+`release.yml` calls it as its last job, once the GitHub Release is published. It
+can also be run by hand to re-run a failed deploy. It never rebuilds: it unpacks the Release's zip and passes it as `BUILD_DIR`, so
 WordPress.org gets the same files as GitHub. `.distignore` is applied only once,
 by `composer zip`. Only the preflight script and `.wordpress-org/` (synced to SVN
 `assets/`) come from the checkout.

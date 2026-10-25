@@ -115,7 +115,7 @@ composer release:tag           # tags the version that just merged
 composer release:tag 1.2.0     # or name the version explicitly
 ```
 
-The GitHub Action then runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release. Then deploy that release to WordPress.org (below).
+The GitHub Action then runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release, then deploys that release to WordPress.org (below).
 
 Always release through these two commands. Tagging by hand, or drafting a release from the GitHub UI, skips the changelog roll that the tooling depends on and leaves the next release unable to work out its own version.
 
@@ -123,7 +123,7 @@ Always release through these two commands. Tagging by hand, or drafting a releas
 
 The [Deploy to WordPress.org](.github/workflows/deploy-wporg.yml) workflow publishes a GitHub Release to the [plugin directory](https://wordpress.org/plugins/uca-payment-gateway-with-wayforpay-for-givewp/). It copies the Release's zip, unchanged, into SVN `trunk/` and `tags/X.Y.Z/`, and mirrors [.wordpress-org/](.wordpress-org/) (banners, icons, screenshots) into SVN `assets/`.
 
-To run it, go to **Actions → Deploy to WordPress.org → Run workflow**, choose `main`, and enter the released tag. `dry_run` is on by default and skips only the SVN commit. Check the log, then run it again with `dry_run` off.
+It runs automatically as the last job of the release workflow. To re-run a failed deploy, use **Re-run failed jobs** on that run. Alternatively, go to **Actions → Deploy to WordPress.org → Run workflow**, choose `main`, and enter the released tag. `dry_run` is on by default when run by hand and skips only the SVN commit. Check the log, then run it again with `dry_run` off.
 
 Before anything reaches SVN, [scripts/wporg-preflight.sh](scripts/wporg-preflight.sh) checks that:
 

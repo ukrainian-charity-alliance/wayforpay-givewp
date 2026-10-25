@@ -1,7 +1,8 @@
 name: Deploy to WordPress.org
 
-# Deploys a GitHub Release's zip, as published, to WordPress.org SVN. Run it by
-# hand to deploy, backfill or re-run a release; dry_run skips the SVN commit.
+# Deploys a GitHub Release's zip, as published, to WordPress.org SVN. release.yml
+# calls it after each release; run it by hand to re-run a failed deploy. dry_run
+# skips the SVN commit.
 
 on:
   workflow_call:
