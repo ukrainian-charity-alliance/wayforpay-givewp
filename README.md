@@ -115,9 +115,28 @@ composer release:tag           # tags the version that just merged
 composer release:tag 1.2.0     # or name the version explicitly
 ```
 
-The GitHub Action then runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release.
+The GitHub Action then runs the test suite, stamps the new version into the plugin files, syncs the changelog into `readme.txt`, and attaches `uca-payment-gateway-with-wayforpay-for-givewp.zip` to a new GitHub Release. Then deploy that release to WordPress.org (below).
 
 Always release through these two commands. Tagging by hand, or drafting a release from the GitHub UI, skips the changelog roll that the tooling depends on and leaves the next release unable to work out its own version.
+
+### Deploying to WordPress.org
+
+The [Deploy to WordPress.org](.github/workflows/deploy-wporg.yml) workflow publishes a GitHub Release to the [plugin directory](https://wordpress.org/plugins/uca-payment-gateway-with-wayforpay-for-givewp/). It copies the Release's zip, unchanged, into SVN `trunk/` and `tags/X.Y.Z/`, and mirrors [.wordpress-org/](.wordpress-org/) (banners, icons, screenshots) into SVN `assets/`.
+
+To run it, go to **Actions → Deploy to WordPress.org → Run workflow**, choose `main`, and enter the released tag. `dry_run` is on by default and skips only the SVN commit. Check the log, then run it again with `dry_run` off.
+
+Before anything reaches SVN, [scripts/wporg-preflight.sh](scripts/wporg-preflight.sh) checks that:
+
+- the zip's `Version:`, `WAYFORPAY_GIVEWP_VERSION` and `Stable tag:` all match the tag;
+- the readme changelog has an entry for it;
+- the tag is on `main`;
+- the version is newer than every tag already in SVN.
+
+Release Confirmation is on for this plugin. After a deploy, WordPress.org emails the committers, and the release goes live once one of them confirms it.
+
+- **Credentials.** The `wordpress-org` environment (**Settings → Environments**) holds `SVN_USERNAME` and `SVN_PASSWORD`, and only `main` and release tags can use it. The password is the SVN password generated under profiles.wordpress.org → Account & Security, not the account password.
+- **Assets.** `.wordpress-org/` is the source of truth. Anything added straight to SVN `assets/` is removed on the next deploy.
+- **Readme-only changes** (such as `Tested up to`) ship with the next release. Tags can't change once confirmed.
 
 ## Support Ukrainian Charity Alliance
 

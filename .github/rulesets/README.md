@@ -20,7 +20,12 @@ Two deliberate choices:
   to override anything. In a genuine emergency, edit or disable the ruleset —
   deliberately, and visibly in the audit log.
 
-To create it:
+[protect-release-tags.json](protect-release-tags.json) stops `X.Y.Z` tags from
+being moved or deleted once pushed, so a released version always names the code
+that shipped to WordPress.org. Creating tags stays open to writers. A tag whose
+release fails is abandoned, and the next patch version is released instead.
+
+To create a ruleset:
 
 ```bash
 gh api --method POST \
@@ -28,7 +33,7 @@ gh api --method POST \
   --input .github/rulesets/protect-main.json
 ```
 
-To update it once it exists, look up its id and `PUT` to it:
+To update one once it exists, look up its id and `PUT` to it:
 
 ```bash
 gh api /repos/ukrainian-charity-alliance/wayforpay-givewp/rulesets \
@@ -38,5 +43,7 @@ gh api --method PUT \
   /repos/ukrainian-charity-alliance/wayforpay-givewp/rulesets/RULESET_ID \
   --input .github/rulesets/protect-main.json
 ```
+
+Substitute `protect-release-tags.json` for the tag ruleset.
 
 Or import the file in the UI: **Settings → Rules → Rulesets → New ruleset → Import**.

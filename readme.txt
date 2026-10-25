@@ -1,5 +1,5 @@
 === UCA Payment Gateway with WayForPay for GiveWP ===
-Contributors: radion
+Contributors: danradion
 Donate link: https://en.uba.com.ua/support-us/
 Tags: givewp, wayforpay, payment gateway, donations, ukraine
 Requires at least: 6.6
